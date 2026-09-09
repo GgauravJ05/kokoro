@@ -92,8 +92,8 @@ def test_every_source_declares_a_licence_and_its_biases() -> None:
         assert not src.redistributable, "nothing in this repo may be redistributed"
 
 
-def test_registry_covers_the_three_required_roles() -> None:
-    assert {s.role for s in SOURCES.values()} == {"catalog", "reviews", "ratings"}
+def test_registry_covers_every_required_role() -> None:
+    assert {s.role for s in SOURCES.values()} == {"catalog", "reviews", "ratings", "tags"}
 
 
 def test_resolve_url_shape() -> None:
@@ -210,9 +210,16 @@ def built_corpus(tmp_path):
         "catalog": raw / "catalog.csv",
         "reviews": raw / "reviews.csv",
         "ratings": raw / "ratings.csv",
+        "tags": raw / "tags.parquet",
     }
     _catalog_frame().to_csv(paths["catalog"], index=False)
     _review_frame().to_csv(paths["reviews"], index=False)
+    pd.DataFrame(
+        {
+            "mal_id": [52991, 9253],
+            "tags": [["Tragedy", "Found Family"], ["Time Travel", "Philosophy"]],
+        }
+    ).to_parquet(paths["tags"], index=False)
     pd.DataFrame(
         {
             "user_id": [1, 1, 1, 2, 2, 2, 3, 3, 3, 3],
@@ -263,12 +270,12 @@ def test_corpus_version_changes_with_the_inputs(built_corpus, tmp_path) -> None:
     altered = {
         key: DownloadResult(
             source=SOURCES[key],
-            path=out.parent / "raw" / f"{key}.csv",
+            path=out.parent / "raw" / ("tags.parquet" if key == "tags" else f"{key}.csv"),
             sha256="different",
             bytes=1,
             cached=False,
         )
-        for key in ("catalog", "reviews", "ratings")
+        for key in ("catalog", "reviews", "ratings", "tags")
     }
     other = build(altered, tmp_path / "other", min_reviews_per_title=1)
     assert other.version != manifest.version, "different inputs must give a different version"
@@ -336,3 +343,39 @@ def test_titles_without_air_dates_are_never_cold(built_corpus) -> None:
     # Zero is the sentinel for 'unknown', and zero is before every realistic cut,
     # so such titles always land in train rather than being silently held out.
     assert (c.item_debut == 0).sum() >= 0
+
+
+def test_tags_normalise_and_key_on_mal_id() -> None:
+    from kokoro.data.build import normalise_tags
+
+    raw = pd.DataFrame(
+        {
+            "mal_id": [1, 2, None, 1],
+            "tags": [["Space", "Noir"], None, ["Orphan"], ["Duplicate"]],
+        }
+    )
+    out = normalise_tags(raw)
+    assert set(out["anime_id"].astype(int)) == {1, 2}, "null ids dropped, ids deduped"
+    assert out.loc[out["anime_id"] == 1, "tags"].iloc[0] == ["Space", "Noir"]
+    assert out.loc[out["anime_id"] == 2, "tags"].iloc[0] == [], "None becomes an empty list"
+
+
+def test_tags_reject_a_missing_join_key() -> None:
+    from kokoro.data.build import normalise_tags
+
+    with pytest.raises(KeyError, match="mal_id"):
+        normalise_tags(pd.DataFrame({"anilist_id": [1], "tags": [["X"]]}))
+
+
+def test_build_merges_tags_onto_the_catalog(built_corpus) -> None:
+    """Tags are the item tower's main content signal; the merge must not drop rows."""
+    out, manifest = built_corpus
+    titles = pd.read_parquet(out / "titles.parquet")
+
+    assert "tags" in titles.columns
+    tagged = titles[titles["anime_id"] == 52991]["tags"].iloc[0]
+    assert list(tagged) == ["Tragedy", "Found Family"]
+
+    untagged = titles[titles["anime_id"] == 999]["tags"].iloc[0]
+    assert list(untagged) == [], "a title with no tags gets an empty list, never NaN"
+    assert manifest["statistics"]["titles_with_tags"] >= 2

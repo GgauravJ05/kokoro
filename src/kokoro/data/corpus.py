@@ -52,6 +52,39 @@ class Corpus:
         """Corpus content hash."""
         return str(self.manifest["corpus_version"])
 
+    def item_texts(self) -> list[str]:
+        """Render every catalog item as the string the item tower encodes.
+
+        Ordered by contiguous item position, so the result lines up with the
+        embedding matrix a content model is built from.
+        """
+        from kokoro.features.text import build_item_texts
+
+        by_id = self.titles.set_index("anime_id")
+        rows: list[dict[str, Any]] = []
+        for raw, _ in sorted(self.item_index.items(), key=lambda kv: kv[1]):
+            if raw in by_id.index:
+                row = {str(key): value for key, value in by_id.loc[raw].to_dict().items()}
+                rows.append(row)
+            else:
+                rows.append({"title": f"unknown title {raw}"})
+        return build_item_texts(rows)
+
+    def title_variants(self) -> dict[int, tuple[str, ...]]:
+        """Return every known title string per raw ``anime_id``, for masking."""
+        out: dict[int, tuple[str, ...]] = {}
+        cols = [
+            c
+            for c in ("title", "title_english", "title_japanese", "synonyms")
+            if c in self.titles.columns
+        ]
+        frame = self.titles[["anime_id", *cols]]
+        ids = frame["anime_id"].to_numpy()
+        rest = frame[cols].to_numpy(dtype=object)
+        for anime_id, values in zip(ids, rest, strict=True):
+            out[int(anime_id)] = tuple(str(v) for v in values if isinstance(v, str) and v.strip())
+        return out
+
     def item_titles(self) -> npt.NDArray[np.str_]:
         """Return display titles ordered by contiguous item position."""
         lookup = self.titles.set_index("anime_id")["title"]

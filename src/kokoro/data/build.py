@@ -102,10 +102,12 @@ def normalise_catalog(raw: pd.DataFrame) -> pd.DataFrame:
     df["title_english"] = raw.get("English", pd.Series(dtype="string")).astype("string")
     df["title_japanese"] = raw.get("Japanese", pd.Series(dtype="string")).astype("string")
 
-    synopsis_col = next((c for c in raw.columns if "syn" in c.lower()), None)
-    df["synopsis"] = (
-        raw[synopsis_col].astype("string") if synopsis_col else pd.Series(pd.NA, dtype="string")
-    )
+    # This source has NO synopsis column — only "Synonyms", which is a list of
+    # alternate titles. An earlier fuzzy lookup for a column containing "syn"
+    # matched Synonyms and labelled it synopsis, which would have trained the
+    # item tower on alternate titles instead of plot text. Columns are named
+    # explicitly now; the tag source supplies the descriptive signal instead.
+    df["synonyms"] = raw.get("Synonyms", pd.Series(dtype="string")).astype("string")
 
     df["media_type"] = raw["Type"].astype("string")
     df["episodes"] = pd.to_numeric(raw["Episodes"], errors="coerce").astype("Int64")
@@ -124,6 +126,29 @@ def normalise_catalog(raw: pd.DataFrame) -> pd.DataFrame:
     df["demographic"] = raw.get("Demographic", pd.Series(dtype="string")).astype("string")
     df["aired_start"] = raw["Aired"].map(_parse_aired_start)
 
+    df = df.dropna(subset=["anime_id"]).drop_duplicates(subset=["anime_id"], keep="first")
+    return df.reset_index(drop=True)
+
+
+def normalise_tags(raw: pd.DataFrame) -> pd.DataFrame:
+    """Normalise the AniList tag table, keyed by MyAnimeList id.
+
+    Args:
+        raw: The AniList metadata parquet as read.
+
+    Returns:
+        A frame with ``anime_id`` and ``tags``, one row per joinable title.
+
+    Raises:
+        KeyError: If the join key or the tag column is absent.
+    """
+    for col in ("mal_id", "tags"):
+        if col not in raw.columns:
+            raise KeyError(f"expected a {col!r} column, got {list(raw.columns)}")
+
+    df = pd.DataFrame()
+    df["anime_id"] = pd.to_numeric(raw["mal_id"], errors="coerce").astype("Int64")
+    df["tags"] = raw["tags"].map(lambda v: list(v) if v is not None else [])
     df = df.dropna(subset=["anime_id"]).drop_duplicates(subset=["anime_id"], keep="first")
     return df.reset_index(drop=True)
 
@@ -222,13 +247,16 @@ def build_corpus(
     Raises:
         KeyError: If a required source is missing from ``downloads``.
     """
-    for required in ("catalog", "reviews", "ratings"):
+    for required in ("catalog", "reviews", "ratings", "tags"):
         if required not in downloads:
             raise KeyError(f"missing required source {required!r}")
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
     catalog = normalise_catalog(pd.read_csv(downloads["catalog"].path))
+    tags = normalise_tags(pd.read_parquet(downloads["tags"].path))
+    catalog = catalog.merge(tags, on="anime_id", how="left")
+    catalog["tags"] = catalog["tags"].map(lambda v: v if isinstance(v, list) else [])
     reviews = normalise_reviews(pd.read_csv(downloads["reviews"].path))
     ratings = normalise_ratings(
         pd.read_csv(downloads["ratings"].path, names=["user_id", "anime_id", "rating"], header=0)
@@ -269,6 +297,13 @@ def build_corpus(
             counts[counts >= min_reviews_per_title].median()
         ),
         "median_review_chars": float(reviews_joined["n_chars"].median()),
+        "titles_with_tags": int(catalog["tags"].map(bool).sum()),
+        "rated_titles_with_tags": int(
+            catalog[catalog["anime_id"].isin(rating_ids)]["tags"].map(bool).sum()
+        ),
+        "tag_coverage_of_rated": round(
+            float(catalog[catalog["anime_id"].isin(rating_ids)]["tags"].map(bool).mean()), 4
+        ),
     }
 
     # The corpus version is the hash of the inputs plus the build parameters, so

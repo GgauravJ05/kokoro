@@ -100,6 +100,12 @@ def benchmark(
         "user_holdout", "--split", help="Split strategy: user_holdout or cold_start."
     ),
     cold_cut_year: int = typer.Option(2014, help="Debut year cut for the cold_start split."),
+    content: bool = typer.Option(
+        False, "--content", help="Add the off-the-shelf content retriever (downloads an encoder)."
+    ),
+    encoder: str = typer.Option(
+        "sentence-transformers/all-MiniLM-L6-v2", help="Sentence encoder for --content."
+    ),
 ) -> None:
     """Run the baseline suite, on a real corpus when one is given.
 
@@ -108,7 +114,20 @@ def benchmark(
     structure to learn.
     """
     if corpus is not None:
-        _benchmark_corpus(corpus, results_out, k, seed, max_users, epochs, strategy, cold_cut_year)
+        # Keywords, not positions: a silently-dropped positional argument here
+        # made --content a no-op that reported nothing.
+        _benchmark_corpus(
+            corpus_path=corpus,
+            results_out=results_out,
+            k=k,
+            seed=seed,
+            max_users=max_users,
+            epochs=epochs,
+            strategy=strategy,
+            cold_cut_year=cold_cut_year,
+            content=content,
+            encoder=encoder,
+        )
         return
     import numpy as np
 
@@ -149,6 +168,8 @@ def _benchmark_corpus(
     epochs: int,
     strategy: str = "user_holdout",
     cold_cut_year: int = 2014,
+    content: bool = False,
+    encoder: str = "sentence-transformers/all-MiniLM-L6-v2",
 ) -> None:
     """Run the baselines against a built corpus."""
     from datetime import datetime, timezone
@@ -197,6 +218,15 @@ def _benchmark_corpus(
         ItemKNNRecommender(k_neighbors=50),
         BPRMatrixFactorization(n_factors=64, n_epochs=epochs, lr=0.05, seed=seed),
     ]
+    if content:
+        from kokoro.models.content import ContentRetriever, encode_texts
+
+        texts = c.item_texts()
+        console.print(f"encoding {len(texts):,} item texts with {encoder}…")
+        console.print(f"  example: [dim]{texts[0][:150]}[/dim]")
+        embeddings = encode_texts(texts, model_name=encoder, show_progress=True)
+        models.append(ContentRetriever(embeddings, name="content-offshelf"))
+
     with console.status("fitting and scoring…"):
         results = run_benchmark(models, split, k=k)
 

@@ -34,7 +34,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 __all__ = ["SOURCES", "Source", "download", "resolve_url"]
 
-Role = Literal["catalog", "reviews", "ratings"]
+Role = Literal["catalog", "reviews", "ratings", "tags"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +131,27 @@ SOURCES: dict[str, Source] = {
             "Text is lowercased and cleaned, which destroys the capitalisation "
             "that features.arcs uses to detect named arcs (the 'Marley arc' "
             "pattern). Expect degraded named-arc recall on this source.",
+        ),
+    ),
+    "tags": Source(
+        key="tags",
+        repo="LeData/media-metadata-anilist-anime",
+        filename="data/train-00000-of-00001.parquet",
+        role="tags",
+        licence="cc0-1.0",
+        rows=10_000,
+        notes=(
+            "AniList descriptive tags, joined on mal_id. This is the item tower's "
+            "primary content signal: the MyAnimeList catalog carries no synopsis at "
+            "all, and AniList tags ('Tragedy', 'Philosophy', 'Found Family', "
+            "'Episodic') are closer to mood vocabulary than genres are anyway. "
+            "Public domain, so the one source here with no redistribution question."
+        ),
+        biases=(
+            "Top 10,000 titles by popularity: covers 49.8% of rated titles. The "
+            "other half falls back to genres, themes and studio, so the item tower "
+            "sees materially less signal for them — report cold-start broken down "
+            "by tag availability, not just in aggregate.",
         ),
     ),
     "ratings": Source(

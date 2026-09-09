@@ -108,22 +108,27 @@ not a result.
 `--split cold_start --cold-cut-year 2014`. 998 titles have **zero** training
 interactions.
 
-| model | recall@10 | ndcg@10 | mrr@10 | coverage@10 |
-|---|---|---|---|---|
-| random | 0.0026 | 0.0039 | 0.0097 | 0.915 |
-| popularity | **0.0000** | **0.0000** | **0.0000** | 0.011 |
-| item-kNN | **0.0000** | **0.0000** | **0.0000** | 0.032 |
-| BPR-MF | **0.0000** | **0.0000** | **0.0000** | 0.099 |
+| model | recall@10 | ndcg@10 | mrr@10 | coverage@10 | pop. lift |
+|---|---|---|---|---|---|
+| random | 0.0026 | 0.0039 | 0.0097 | 0.915 | 0.99× |
+| popularity | **0.0000** | **0.0000** | **0.0000** | 0.011 | 25.3× |
+| item-kNN | **0.0000** | **0.0000** | **0.0000** | 0.032 | 20.9× |
+| BPR-MF | **0.0000** | **0.0000** | **0.0000** | 0.099 | 17.0× |
+| **content** (off-the-shelf) | **0.0094** | **0.0119** | **0.0231** | 0.116 | **1.69×** |
 
 Every collaborative model scores exactly zero, and this is not a bug — it is
 arithmetic. A model whose only representation of an item is who interacted with
 it has *no* representation of an item nobody has interacted with. Random beats
 all three by chance alone.
 
-This is the gap Kokoro exists to fill. The content tower can embed a title from
-its synopsis, tags and reviews without a single interaction, so **any** non-zero
-cold-start NDCG is something no baseline here can produce at all. That is the
-claim to make, and it is falsifiable.
+The content retriever is the first model here that can answer this split at all:
+**3× random**, and a popularity lift of 1.69× against their 17–25×. It embeds a
+title from its metadata text, so a show that aired yesterday is rankable today.
+
+That number is the bar, not the goal. It comes from an **off-the-shelf**
+MiniLM encoder over tags and genres, with no training on review text — it is
+precisely the "would a generic embedding model have done just as well?" baseline
+that the trained two-tower has to beat before it is worth anything.
 
 ## Quickstart
 
@@ -233,6 +238,7 @@ good.
       `403 temporarily disabled`, Jikan `504`. Ingestion is source-agnostic and
       currently runs off static Hugging Face dumps instead
 - [ ] Arc alignment: hand-annotated set, then extractor evaluation
+- [x] Content tower + off-the-shelf cold-start baseline (first non-zero result)
 - [ ] Two-tower training + negative-mining ablation
 - [ ] Mood-axis human validation (Spearman ρ per axis)
 - [ ] Trajectory encoder + shape-query evaluation
