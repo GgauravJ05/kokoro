@@ -84,7 +84,7 @@ jobs:
         run: pytest -q --cov-report=xml -m "not network and not gpu"
       - name: upload coverage
         if: matrix.python == '3.12' && matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.xml
@@ -103,7 +103,7 @@ jobs:
       - run: python -m build
       - name: metadata must be valid before it can ever be published
         run: twine check dist/*
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
