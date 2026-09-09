@@ -1,5 +1,8 @@
 # Repository setup and governance
 
+> The research plan this repo implements is in [`plan.html`](plan.html) —
+> a standalone page, no build step, just open it in a browser.
+
 What is configured, what is deferred, and how to finish the job.
 
 ## Applied now

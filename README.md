@@ -72,7 +72,8 @@ Early. The evaluation harness, the splits, the baselines and the from-scratch
 matrix factoriser are implemented and tested. The neural towers are implemented
 but untrained — **no accuracy numbers are claimed yet, and this README will not
 carry a results table until they come out of `kokoro benchmark` on real data.**
-See [the roadmap](#roadmap).
+See [the roadmap](#roadmap), or open [`docs/plan.html`](docs/plan.html) in a
+browser for the full nine-week plan with the trajectory figure.
 
 ## Quickstart
 

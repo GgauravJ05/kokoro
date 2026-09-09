@@ -1,0 +1,812 @@
+<!doctype html>
+<!--
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Copyright (C) 2026 Gaurav Jadhav <gauravmakarandjadhav@gmail.com>
+  Canonical source: https://github.com/GgauravJ05/kokoro
+
+  Kokoro — nine-week research and build plan.
+  Standalone page: open docs/plan.html directly in a browser, no build step.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="Gaurav Jadhav">
+<meta name="description" content="Nine-week research and build plan for Kokoro, a mood-conditioned anime and manga retrieval system with narrative-arc trajectory matching.">
+<style>
+  /* Minimal reset — the page's own tokens and rules follow below. */
+  html { color-scheme: light dark; }
+  body { margin: 0; font: 14px system-ui, sans-serif; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>Kokoro Build Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* ---------- tokens: complete light palette on bare :root ---------- */
+  :root {
+    --ground:      #f6f4f9;
+    --surface:     #fffdff;
+    --surface-2:   #efecf5;
+    --ink:         #191527;
+    --ink-2:       #4a4360;
+    --muted:       #6f6885;
+    --line:        #e0dbea;
+    --line-strong: #cbc4da;
+    --accent:      #a63a63;   /* deep rose — the single bold note */
+    --accent-soft: #f3e2e9;
+    --cool:        #3d5a99;   /* ink blue — secondary encoding only */
+    --cool-soft:   #e3e8f4;
+    --good:        #2f6b52;
+    --warn:        #8a5a12;
+    --shadow:      0 1px 2px rgba(25, 21, 39, .06), 0 8px 24px -18px rgba(25, 21, 39, .34);
+
+    --f-display: "Newsreader", "Iowan Old Style", Georgia, serif;
+    --f-body: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --measure: 68ch;
+    --rail: 5.5rem;
+    color-scheme: light dark;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #131020;
+      --surface:     #1b1729;
+      --surface-2:   #241f36;
+      --ink:         #ece8f6;
+      --ink-2:       #c3bcd6;
+      --muted:       #948caa;
+      --line:        #2c2640;
+      --line-strong: #3d3555;
+      --accent:      #e0748f;
+      --accent-soft: #331d29;
+      --cool:        #8aa6de;
+      --cool-soft:   #1e2537;
+      --good:        #74c3a1;
+      --warn:        #d6a55c;
+      --shadow:      0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px -20px rgba(0, 0, 0, .9);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #131020;
+    --surface:     #1b1729;
+    --surface-2:   #241f36;
+    --ink:         #ece8f6;
+    --ink-2:       #c3bcd6;
+    --muted:       #948caa;
+    --line:        #2c2640;
+    --line-strong: #3d3555;
+    --accent:      #e0748f;
+    --accent-soft: #331d29;
+    --cool:        #8aa6de;
+    --cool-soft:   #1e2537;
+    --good:        #74c3a1;
+    --warn:        #d6a55c;
+    --shadow:      0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px -20px rgba(0, 0, 0, .9);
+  }
+
+  /* ---------- base ---------- */
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 16.5px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 63rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 6rem;
+  }
+
+  p { margin: 0; max-width: var(--measure); }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  h1, h2, h3 { margin: 0; text-wrap: balance; font-weight: 500; }
+
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: .7rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    display: grid;
+    gap: 1.5rem;
+    padding-bottom: 2.25rem;
+    border-bottom: 1px solid var(--line-strong);
+  }
+
+  .brand { display: flex; align-items: baseline; gap: .85rem; }
+
+  .glyph {
+    font-family: var(--f-display);
+    font-size: 2.6rem;
+    line-height: 1;
+    color: var(--accent);
+  }
+
+  .masthead h1 {
+    font-family: var(--f-display);
+    font-size: clamp(2.4rem, 6vw, 3.6rem);
+    line-height: 1.06;
+    letter-spacing: -.015em;
+  }
+
+  .masthead h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .standfirst {
+    font-family: var(--f-display);
+    font-size: clamp(1.1rem, 2.4vw, 1.35rem);
+    line-height: 1.5;
+    color: var(--ink-2);
+    max-width: 46ch;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1.75rem;
+    font-family: var(--f-mono);
+    font-size: .76rem;
+    color: var(--muted);
+  }
+  .meta b { color: var(--ink-2); font-weight: 500; }
+
+  /* ---------- section rhythm with a numbered rail ---------- */
+  section {
+    display: grid;
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    gap: 0 2rem;
+    padding-top: 3.25rem;
+  }
+
+  .rail {
+    font-family: var(--f-mono);
+    font-size: .72rem;
+    color: var(--muted);
+    letter-spacing: .1em;
+    padding-top: .45rem;
+    border-top: 2px solid var(--accent);
+    align-self: start;
+  }
+
+  .body { display: grid; gap: 1.15rem; min-width: 0; }
+
+  .body > h2 {
+    font-family: var(--f-display);
+    font-size: clamp(1.5rem, 3.4vw, 1.95rem);
+    letter-spacing: -.01em;
+    line-height: 1.2;
+  }
+
+  @media (max-width: 46rem) {
+    section { grid-template-columns: 1fr; gap: .9rem; }
+    .rail { border-top: none; padding-top: 0; }
+  }
+
+  /* ---------- the thesis callout ---------- */
+  .thesis {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 1.1rem 1.4rem;
+    border-radius: 0 6px 6px 0;
+  }
+  .thesis p { font-family: var(--f-display); font-size: 1.12rem; line-height: 1.55; }
+
+  /* ---------- figure ---------- */
+  figure { margin: .5rem 0 0; }
+
+  .chart-frame {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1.25rem 1rem .75rem;
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+  }
+  .chart-frame svg { display: block; min-width: 34rem; width: 100%; height: auto; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem 1.5rem;
+    margin-top: .9rem;
+    padding: 0 .35rem;
+    font-family: var(--f-mono);
+    font-size: .74rem;
+    color: var(--ink-2);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: .5rem; }
+  .swatch { width: 1.5rem; height: 0; border-top-width: 2.5px; border-top-style: solid; }
+
+  figcaption {
+    margin-top: .85rem;
+    font-size: .87rem;
+    color: var(--muted);
+    max-width: var(--measure);
+  }
+
+  /* ---------- generic prose furniture ---------- */
+  ul.plain { margin: 0; padding-left: 1.15rem; display: grid; gap: .45rem; max-width: var(--measure); }
+  ul.plain li::marker { color: var(--accent); }
+
+  .scroll { overflow-x: auto; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 30rem;
+    font-size: .9rem;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-family: var(--f-mono);
+    font-size: .7rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-bottom: .6rem;
+  }
+  th, td {
+    text-align: left;
+    padding: .55rem .8rem .55rem 0;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    font-weight: 600;
+    font-size: .74rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  td.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+  td code, .axis-neg, .axis-pos { font-family: var(--f-mono); font-size: .82rem; }
+  .axis-neg { color: var(--cool); }
+  .axis-pos { color: var(--accent); }
+  tr.headline td { background: var(--accent-soft); }
+  tr.headline td:first-child { font-weight: 600; }
+
+  /* ---------- status list ---------- */
+  .status { display: grid; gap: .1rem; max-width: var(--measure); }
+  .status div {
+    display: grid;
+    grid-template-columns: 1.6rem 1fr auto;
+    gap: .75rem;
+    align-items: baseline;
+    padding: .5rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .status .mark { font-family: var(--f-mono); font-size: .85rem; }
+  .done .mark { color: var(--good); }
+  .todo .mark { color: var(--muted); }
+  .status .note {
+    font-family: var(--f-mono);
+    font-size: .72rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* ---------- roadmap ---------- */
+  .weeks { display: grid; gap: 0; max-width: var(--measure); }
+  .week {
+    display: grid;
+    grid-template-columns: 4.5rem 1fr;
+    gap: 1.25rem;
+    padding: 1rem 0;
+    border-top: 1px solid var(--line);
+  }
+  .week:first-child { border-top: 1px solid var(--line-strong); }
+  .week-no {
+    font-family: var(--f-mono);
+    font-size: .74rem;
+    color: var(--muted);
+    letter-spacing: .06em;
+    padding-top: .18rem;
+  }
+  .week h3 { font-size: 1rem; font-weight: 600; letter-spacing: -.005em; }
+  .week p { font-size: .92rem; color: var(--ink-2); margin-top: .2rem; }
+  .week.pivot { background: linear-gradient(90deg, var(--accent-soft), transparent 72%); }
+  .week.pivot .week-no { color: var(--accent); font-weight: 500; }
+
+  /* ---------- resume bullet ---------- */
+  .bullet {
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    padding: 1.2rem 1.35rem;
+    box-shadow: var(--shadow);
+    max-width: var(--measure);
+  }
+  .bullet .label {
+    font-family: var(--f-mono);
+    font-size: .68rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: block;
+    margin-bottom: .55rem;
+  }
+  .bullet strong { font-weight: 600; }
+  .bullet .fig { font-family: var(--f-mono); font-variant-numeric: tabular-nums; color: var(--accent); }
+  .bullet .placeholder { color: var(--muted); font-style: italic; }
+
+  /* ---------- links row ---------- */
+  .links { display: grid; gap: .55rem; max-width: var(--measure); font-size: .93rem; }
+  .links div { display: grid; grid-template-columns: 11rem 1fr; gap: 1rem; }
+  .links dt {
+    font-family: var(--f-mono);
+    font-size: .74rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-top: .18rem;
+  }
+  .links dd { margin: 0; }
+  code.path { font-family: var(--f-mono); font-size: .84rem; color: var(--ink-2); }
+
+  footer {
+    margin-top: 4.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line-strong);
+    font-family: var(--f-mono);
+    font-size: .73rem;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem 1.5rem;
+  }
+
+  /* ---------- motion ---------- */
+  .curve { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  @media (prefers-reduced-motion: no-preference) {
+    .curve {
+      stroke-dasharray: var(--len);
+      stroke-dashoffset: var(--len);
+      animation: draw 1.5s cubic-bezier(.4, 0, .2, 1) forwards;
+    }
+    .curve:nth-of-type(2) { animation-delay: .16s; }
+    .curve:nth-of-type(3) { animation-delay: .32s; }
+  }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <div class="brand">
+      <span class="glyph" aria-hidden="true">心</span>
+      <p class="eyebrow">Kokoro &nbsp;·&nbsp; research build plan</p>
+    </div>
+    <h1>Mood is not in the<br><em>metadata</em>.</h1>
+    <p class="standfirst">
+      A nine-week plan to build a retrieval system that learns how anime and manga
+      actually feel — and models that feeling as a curve over the runtime rather
+      than a single point.
+    </p>
+    <div class="meta">
+      <span><b>Author</b> &nbsp;Gaurav Jadhav</span>
+      <span><b>Repo</b> &nbsp;GgauravJ05/kokoro (private)</span>
+      <span><b>Licence</b> &nbsp;AGPL-3.0-or-later</span>
+      <span><b>Status</b> &nbsp;Week 0 — scaffold shipped</span>
+    </div>
+  </header>
+
+  <section>
+    <p class="rail">Thesis</p>
+    <div class="body">
+      <h2>Why this isn't another cosine-similarity demo</h2>
+      <p>
+        The standard version of this project — scrape MyAnimeList, TF-IDF the synopses,
+        cosine similarity, ship a Streamlit app — exists on thousands of resumes. A
+        reviewer identifies it in ten seconds. Kokoro is built around two claims that
+        are hard to make and harder to fake.
+      </p>
+      <div class="thesis">
+        <p>
+          <strong>One.</strong> Genre tags cannot express mood. <span class="axis-neg">Drama</span>
+          contains both <em>Violet Evergarden</em> and <em>School Days</em>. The signal
+          has to be learned from how viewers actually write about what a show did to them.
+        </p>
+      </div>
+      <div class="thesis">
+        <p>
+          <strong>Two.</strong> A title is not one point in taste space. Every deployed
+          recommender treats it as one, and that is why none of them can answer
+          <em>“starts light, gets devastating.”</em>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="rail">Figure</p>
+    <div class="body">
+      <h2>The failure a single mood vector hides</h2>
+      <p>
+        Three shows, plotted on the <code class="path">comfort</code> axis across their
+        runtime. All three average out to roughly the same place. A point-based model
+        calls them interchangeable; a viewer would never confuse them.
+      </p>
+
+      <figure>
+        <div class="chart-frame">
+          <svg id="arcs" viewBox="0 0 760 300" role="img"
+               aria-label="Mood trajectories on the comfort axis for three anime across their runtime. Steins;Gate begins comfortable and inverts sharply at episode 12 before partially recovering. Vinland Saga begins bleak and rises steadily. Non Non Biyori stays warm and flat throughout. All three have similar mean values.">
+          </svg>
+        </div>
+        <div class="legend">
+          <span><i class="swatch" style="border-top-color: var(--accent);"></i>Steins;Gate</span>
+          <span><i class="swatch" style="border-top-color: var(--cool);"></i>Vinland Saga S1</span>
+          <span><i class="swatch" style="border-top-color: var(--muted); border-top-style: dashed;"></i>Non Non Biyori</span>
+        </div>
+        <figcaption>
+          Illustrative curves drawn from episode-level review commentary, not model output —
+          this is the hypothesis the trajectory encoder is built to capture. The mean of each
+          curve sits within ±0.1 of the others; the <em>shapes</em> do not overlap at all.
+          <code class="path">shape_distance()</code> weights the first difference precisely so
+          that rising and falling arcs separate even when their levels match.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <p class="rail">Method</p>
+    <div class="body">
+      <h2>Three components, each independently ablatable</h2>
+      <ul class="plain">
+        <li>
+          <strong>Two-tower contrastive retriever.</strong> Untied query and item encoders
+          trained with InfoNCE on <code class="path">(review sentence → title)</code> pairs.
+          Hard negatives are mined from the same genre — a random negative for
+          <em>Violet Evergarden</em> is some sports comedy the model separates trivially.
+        </li>
+        <li>
+          <strong>Anchored mood bottleneck.</strong> The item tower routes through eight named
+          bipolar axes, so every recommendation ships an explanation instead of a similarity
+          score. An anchor-alignment loss is what makes the axes mean what they are named;
+          without it they are an arbitrary rotation and the interpretability claim is false.
+        </li>
+        <li>
+          <strong>Trajectory encoder.</strong> Review sentences are bound to the arc they
+          discuss, giving a curve of shape <code class="path">(n_arcs, n_axes)</code> per
+          title. A dilated 1-D CNN reads local turns; its contribution is gated by a learned
+          scalar initialised at zero, so it only enters the embedding if it earns loss.
+        </li>
+      </ul>
+
+      <div class="scroll">
+        <table>
+          <caption>The eight mood axes</caption>
+          <thead>
+            <tr><th>Axis</th><th>Negative pole</th><th>Positive pole</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>comfort</code></td><td class="axis-neg">devastating, leaves you hollow</td><td class="axis-pos">warm, safe, easy to return to</td></tr>
+            <tr><td><code>pace</code></td><td class="axis-neg">slow, contemplative, drifting</td><td class="axis-pos">relentless, frenetic, breathless</td></tr>
+            <tr><td><code>hope</code></td><td class="axis-neg">bleak, nihilistic, no way out</td><td class="axis-pos">hopeful, earnest, worth believing in</td></tr>
+            <tr><td><code>intimacy</code></td><td class="axis-neg">lonely, isolating, alienated</td><td class="axis-pos">close, tender, deeply connected</td></tr>
+            <tr><td><code>cognition</code></td><td class="axis-neg">visceral, felt in the body</td><td class="axis-pos">cerebral, puzzle-like, demands thought</td></tr>
+            <tr><td><code>levity</code></td><td class="axis-neg">heavy, serious, no relief</td><td class="axis-pos">funny, light, playful</td></tr>
+            <tr><td><code>catharsis</code></td><td class="axis-neg">unresolved, withholding</td><td class="axis-pos">cathartic, earns its ending</td></tr>
+            <tr><td><code>intensity</code></td><td class="axis-neg">gentle, low-stakes</td><td class="axis-pos">overwhelming, operatic</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="rail">Evidence</p>
+    <div class="body">
+      <h2>The evaluation contract, fixed before the models</h2>
+      <p>
+        A harness written after the model it evaluates grows whatever affordance makes that
+        model look good. This one was written first and is already passing tests. Two metric
+        families are reported, and the second is treated as equally load-bearing: a
+        recommender can top the accuracy table by showing the same fifty popular titles to
+        everyone, which is <em>the</em> known failure mode on a catalog this long-tailed.
+      </p>
+
+      <div class="scroll">
+        <table>
+          <caption>Splits, in increasing honesty</caption>
+          <thead>
+            <tr><th>Split</th><th>What it proves</th><th>Reported as</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>random</code></td><td>optimistic ceiling; user seen in train and test</td><td>upper bound only</td></tr>
+            <tr><td><code>leave_one_out</code></td><td>comparable to published baselines</td><td>secondary</td></tr>
+            <tr class="headline"><td><code>temporal</code></td><td>can we predict tomorrow from today</td><td>headline</td></tr>
+            <tr><td><code>cold_start</code></td><td>can a brand-new title be placed at all</td><td>separate table</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <strong>Baselines that must be beaten:</strong> random, popularity, item-kNN, BM25 on
+        synopsis, off-the-shelf embedding similarity, and a raw LLM prompt. That last one is
+        the real bar — if asking a frontier model directly does as well, the project has no
+        reason to exist. The design targets where it wins: latency, cost per query, catalog
+        coverage, calibrated axes, and titles too new or obscure to have been memorised.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="rail">Shipped</p>
+    <div class="body">
+      <h2>What already exists</h2>
+      <div class="status">
+        <div class="done"><span class="mark">✓</span><span>Evaluation harness, accuracy + beyond-accuracy metrics</span><span class="note">tested</span></div>
+        <div class="done"><span class="mark">✓</span><span>Four splits with leakage regression tests</span><span class="note">tested</span></div>
+        <div class="done"><span class="mark">✓</span><span>Baselines: random, popularity, item-kNN (shrunk cosine)</span><span class="note">tested</span></div>
+        <div class="done"><span class="mark">✓</span><span>BPR matrix factorisation — hand-derived gradients, NumPy only</span><span class="note">from scratch</span></div>
+        <div class="done"><span class="mark">✓</span><span>InfoNCE + hard-negative InfoNCE with ablation switches</span><span class="note">tested</span></div>
+        <div class="done"><span class="mark">✓</span><span>Mood bottleneck, trajectory encoder, two-tower retriever</span><span class="note">untrained</span></div>
+        <div class="done"><span class="mark">✓</span><span>AniList ingestion, HNSW + exact index, FastAPI skeleton</span><span class="note">wired</span></div>
+        <div class="done"><span class="mark">✓</span><span>Three-layer provenance incl. retrieval-neutral watermark</span><span class="note">tested</span></div>
+        <div class="done"><span class="mark">✓</span><span>CI: ruff, mypy strict, pytest on 3.10–3.13 × Linux/macOS</span><span class="note">green</span></div>
+      </div>
+      <div class="meta" style="margin-top:.5rem">
+        <span><b>94</b> tests passing</span>
+        <span><b>61%</b> coverage</span>
+        <span><b>0</b> ruff findings</span>
+        <span><b>0</b> mypy errors (strict)</span>
+        <span><b>3</b> real bugs caught by the suite on day one</span>
+      </div>
+      <p style="font-size:.9rem;color:var(--muted)">
+        No accuracy is claimed yet, and the README carries no results table until real numbers
+        come out of <code class="path">kokoro benchmark</code>. That restraint is the point:
+        the harness exists so the first number reported is a number worth trusting.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="rail">Roadmap</p>
+    <div class="body">
+      <h2>Nine weeks</h2>
+      <p>
+        Ordering is deliberate. Data first because it is 40% of the work and everything
+        downstream is blocked on it; the writeup last but budgeted, because it is what
+        admissions committees actually read.
+      </p>
+      <div class="weeks">
+        <div class="week">
+          <span class="week-no">1–2</span>
+          <div>
+            <h3>Corpus</h3>
+            <p>AniList + Jikan ingestion at scale, dedup, spoiler filtering, arc/episode
+            alignment. Freeze a versioned dataset and never quietly change it again.</p>
+          </div>
+        </div>
+        <div class="week">
+          <span class="week-no">3</span>
+          <div>
+            <h3>Baselines on real data</h3>
+            <p>Run the existing harness against the frozen corpus. Add BM25 and the
+            off-the-shelf-embedding baseline. This is the table everything is measured against.</p>
+          </div>
+        </div>
+        <div class="week">
+          <span class="week-no">4–5</span>
+          <div>
+            <h3>Two-tower training</h3>
+            <p>InfoNCE with mined hard negatives. Ablate: negative strategy, batch size as a
+            modelling parameter, tied vs untied towers, bottleneck width.</p>
+          </div>
+        </div>
+        <div class="week">
+          <span class="week-no">6</span>
+          <div>
+            <h3>Axis validation</h3>
+            <p>Collect ~200 human mood judgements; report Spearman ρ per axis. An axis that
+            does not correlate gets reported as such, not quietly dropped.</p>
+          </div>
+        </div>
+        <div class="week pivot">
+          <span class="week-no">7</span>
+          <div>
+            <h3>Trajectory model — the contribution</h3>
+            <p>Train the arc encoder, evaluate shape queries against a hand-built query set,
+            and generate calibrated tonal-shift warnings. This is the week that makes the
+            project publishable rather than merely competent.</p>
+          </div>
+        </div>
+        <div class="week">
+          <span class="week-no">8</span>
+          <div>
+            <h3>Serving</h3>
+            <p>FastAPI + HNSW, quantised export, recall-versus-latency sweep on
+            <code class="path">ef_search</code>, p95 budget under 100 ms. Deploy on a free tier.</p>
+          </div>
+        </div>
+        <div class="week">
+          <span class="week-no">9</span>
+          <div>
+            <h3>Writeup</h3>
+            <p>README with the full ablation table and plots, plus a short arXiv-style PDF.
+            Target a workshop late-breaking-results track — even a rejection is a legitimate
+            line, and the reviews are free feedback.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="rail">Framing</p>
+    <div class="body">
+      <h2>How this reads on a resume</h2>
+      <p>
+        The bullet below is the target shape: a named method, a novel component, numbers on
+        both accuracy and beyond-accuracy, a latency figure, and three live links. Bracketed
+        figures are placeholders until week 5 and week 8 fill them in.
+      </p>
+      <div class="bullet">
+        <span class="label">Target bullet — fill the brackets, don't invent them</span>
+        <p>
+          <strong>Kokoro — Mood-Conditioned Anime Retrieval.</strong> Trained a two-tower
+          contrastive retriever (InfoNCE, mined hard negatives) over
+          <span class="placeholder">[N]</span> user reviews to map free-text affective queries
+          into a 10-dimensional interpretable mood space; introduced per-arc mood-trajectory
+          matching for narrative-shape queries. <span class="fig">+[X]%</span> NDCG@10 over
+          BM25 and <span class="fig">[Y]×</span> catalog coverage versus a popularity baseline,
+          served at <span class="fig">p95 [Z] ms</span> via HNSW.
+          <span class="placeholder">[repo] [paper] [demo]</span>
+        </p>
+      </div>
+      <p style="font-size:.92rem;color:var(--ink-2)">
+        Two things determine whether this lands: the harness existing before the models — done —
+        and the trajectory idea being <em>executed</em> rather than mentioned. Everything else is
+        standard competent engineering, and standard competent engineering is not what gets
+        remembered.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <p class="rail">Repo</p>
+    <div class="body">
+      <h2>Governance and provenance</h2>
+      <dl class="links">
+        <div><dt>Licence</dt><dd>AGPL-3.0-or-later — a fork deployed as a network service must publish its source (§13)</dd></div>
+        <div><dt>Attribution</dt><dd>Redundant by design: <code class="path">NOTICE</code>, <code class="path">CITATION.cff</code>, CI-enforced SPDX headers, artifact stamps, embedding watermark, <code class="path">X-Kokoro-Provenance</code> response header</dd></div>
+        <div><dt>Watermark</dt><dd>Detectable at z&nbsp;&gt;&nbsp;9 over 4k vectors while preserving &gt;99% of top-10 rankings — both claims regression-tested</dd></div>
+        <div><dt>Branch rules</dt><dd>Checked in at <code class="path">.github/rulesets/main-protection.json</code>; applied by one command once the repo goes public</dd></div>
+        <div><dt>Go public</dt><dd>After week 5 numbers exist. See <code class="path">docs/repo-setup.md</code> for the checklist</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <footer>
+    <span>心 — <i>kokoro</i>, the heart as the seat of feeling</span>
+    <span>Copyright © 2026 Gaurav Jadhav</span>
+    <span>AGPL-3.0-or-later</span>
+  </footer>
+</div>
+
+<script>
+  // Mood trajectories, drawn to one shared scale.
+  // x: narrative position 0–1. y: the `comfort` axis, −1 (devastating) to +1 (warm).
+  const SERIES = [
+    { name: "Steins;Gate", color: "var(--accent)", dash: null,
+      pts: [[0,.62],[.16,.72],[.42,.55],[.48,-.24],[.60,-.82],[.78,-.55],[.92,.08],[1,.48]] },
+    { name: "Vinland Saga S1", color: "var(--cool)", dash: null,
+      pts: [[0,-.72],[.18,-.66],[.36,-.44],[.54,-.30],[.72,-.05],[.88,.22],[1,.34]] },
+    { name: "Non Non Biyori", color: "var(--muted)", dash: "5 5",
+      pts: [[0,.66],[.2,.74],[.4,.70],[.6,.76],[.8,.72],[1,.68]] }
+  ];
+
+  const W = 760, H = 300;
+  const M = { top: 22, right: 18, bottom: 42, left: 58 };
+  const px = t => M.left + t * (W - M.left - M.right);
+  const py = v => M.top + (1 - v) / 2 * (H - M.top - M.bottom);
+
+  // Catmull-Rom through the points, converted to cubic Béziers.
+  function smooth(pts) {
+    const p = pts.map(([t, v]) => [px(t), py(v)]);
+    let d = `M ${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;
+    for (let i = 0; i < p.length - 1; i++) {
+      const p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p[i + 1];
+      const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+      const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+      d += ` C ${c1[0].toFixed(1)} ${c1[1].toFixed(1)}, ${c2[0].toFixed(1)} ${c2[1].toFixed(1)},` +
+           ` ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+    }
+    return d;
+  }
+
+  const ns = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs) => {
+    const n = document.createElementNS(ns, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  };
+
+  const svg = document.getElementById("arcs");
+
+  // Horizontal gridlines at each labelled comfort value.
+  [[1, "+1  warm"], [0, " 0"], [-1, "−1  devastating"]].forEach(([v, label]) => {
+    svg.appendChild(el("line", {
+      x1: M.left, x2: W - M.right, y1: py(v), y2: py(v),
+      stroke: "var(--line)", "stroke-width": v === 0 ? 1.5 : 1,
+      "stroke-dasharray": v === 0 ? "" : "3 4"
+    }));
+    const t = el("text", {
+      x: M.left - 10, y: py(v) + 4, "text-anchor": "end",
+      fill: "var(--muted)", "font-family": "IBM Plex Mono, monospace", "font-size": "10.5"
+    });
+    t.textContent = label;
+    svg.appendChild(t);
+  });
+
+  // X axis: narrative position.
+  svg.appendChild(el("line", {
+    x1: M.left, x2: W - M.right, y1: H - M.bottom + 8, y2: H - M.bottom + 8,
+    stroke: "var(--line-strong)", "stroke-width": 1
+  }));
+  [["start", 0, "start"], ["midpoint", .5, "middle"], ["finale", 1, "end"]].forEach(([label, t, anchor]) => {
+    const x = el("text", {
+      x: px(t), y: H - M.bottom + 26, "text-anchor": anchor,
+      fill: "var(--muted)", "font-family": "IBM Plex Mono, monospace", "font-size": "10.5"
+    });
+    x.textContent = label;
+    svg.appendChild(x);
+  });
+
+  const yAxisLabel = el("text", {
+    x: M.left, y: 13, fill: "var(--muted)",
+    "font-family": "IBM Plex Mono, monospace", "font-size": "10.5",
+    "letter-spacing": ".08em"
+  });
+  yAxisLabel.textContent = "COMFORT AXIS";
+  svg.appendChild(yAxisLabel);
+
+  SERIES.forEach(s => {
+    const path = el("path", {
+      d: smooth(s.pts), class: "curve", stroke: s.color, fill: "none"
+    });
+    if (s.dash) path.setAttribute("stroke-dasharray", s.dash);
+    svg.appendChild(path);
+    // Dashed curves keep their pattern; solid ones animate by drawing themselves in.
+    if (!s.dash) {
+      try { path.style.setProperty("--len", path.getTotalLength().toFixed(0)); }
+      catch (e) { path.style.setProperty("--len", "1200"); }
+    }
+    // Endpoint dot, so each line resolves to a value rather than trailing off.
+    const last = s.pts[s.pts.length - 1];
+    svg.appendChild(el("circle", {
+      cx: px(last[0]), cy: py(last[1]), r: 3.5, fill: s.color
+    }));
+  });
+</script>
+</body>
+</html>
