@@ -213,7 +213,9 @@ If this work is useful to you, cite it — see [`CITATION.cff`](CITATION.cff).
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch model, commit convention,
-and the checks that must pass. Security issues: [SECURITY.md](SECURITY.md).
+and the checks that must pass. Repository governance, branch-protection policy
+and the go-public checklist are in [docs/repo-setup.md](docs/repo-setup.md).
+Security issues: [SECURITY.md](SECURITY.md).
 
 ---
 
