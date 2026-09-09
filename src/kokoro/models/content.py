@@ -150,7 +150,12 @@ class ContentRetriever:
         return self
 
     def recommend(
-        self, users: npt.NDArray[np.int64], k: int = 10, *, exclude_seen: bool = True
+        self,
+        users: npt.NDArray[np.int64],
+        k: int = 10,
+        *,
+        exclude_seen: bool = True,
+        candidates: npt.NDArray[np.int64] | None = None,
     ) -> npt.NDArray[np.int64]:
         """Rank the catalog for each user by profile-item cosine similarity.
 
@@ -158,6 +163,7 @@ class ContentRetriever:
             users: User ids, shape ``(n_users,)``.
             k: Items per user.
             exclude_seen: Mask out the user's training interactions.
+            candidates: Restrict the ranking to these item ids (cold-only protocol).
 
         Returns:
             Item ids, shape ``(n_users, k)``, best-first.
@@ -171,7 +177,10 @@ class ContentRetriever:
         if k > self._n_items:
             raise ValueError(f"k={k} exceeds catalog size {self._n_items}")
 
-        scores = self.profiles[users] @ self.embeddings.T
+        from kokoro.models.baselines import mask_to_candidates
+
+        raw = (self.profiles[users] @ self.embeddings.T).astype(np.float64)
+        scores = mask_to_candidates(raw, candidates)
 
         # A user with no liked items has a zero profile and therefore a flat
         # score row; leaving it flat would make argpartition return an arbitrary

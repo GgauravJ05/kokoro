@@ -34,6 +34,7 @@ if TYPE_CHECKING:  # pragma: no cover
     import numpy.typing as npt
 
 __all__ = [
+    "candidate_share",
     "catalog_coverage",
     "evaluate",
     "gini",
@@ -377,6 +378,39 @@ def serendipity(
     return float(np.mean(out))
 
 
+def candidate_share(
+    ranked: Sequence[Sequence[int]] | npt.NDArray[np.int_],
+    candidates: Iterable[int],
+    k: int = 10,
+) -> float:
+    """Fraction of the top ``k`` drawn from the set of answerable items.
+
+    Exists because of a trap in cold-start evaluation. On a cold-start split
+    every held-out positive is, by construction, an item with zero training
+    interactions — so the *oracle* popularity lift is ``0.0``, and a model
+    scores a **high** lift precisely by filling its slots with warm items that
+    cannot possibly be correct. Popularity lift therefore does not mean
+    "biased toward blockbusters" on that split; it means "wasting the ranking".
+
+    This metric says the same thing directly and without the misreading: what
+    share of what the model returned was even eligible.
+
+    Args:
+        ranked: Rankings, shape ``(k,)`` or ``(n_queries, k)``.
+        candidates: Item ids that could legitimately be correct.
+        k: Cut-off.
+
+    Returns:
+        A value in ``[0, 1]``; ``1.0`` means every slot was spent on an
+        answerable item.
+    """
+    r = _as_2d(ranked)[:, :k]
+    eligible = {int(i) for i in candidates}
+    if not eligible:
+        return 0.0
+    return float(np.mean([[int(i) in eligible for i in row] for row in r]))
+
+
 def evaluate(
     ranked: Sequence[Sequence[int]] | npt.NDArray[np.int_],
     relevant: Iterable[Iterable[int]] | Iterable[int],
@@ -387,6 +421,7 @@ def evaluate(
     popularity: npt.NDArray[np.float64] | None = None,
     baseline_ranked: Sequence[Sequence[int]] | npt.NDArray[np.int_] | None = None,
     gains: Mapping[int, float] | None = None,
+    candidates: Iterable[int] | None = None,
 ) -> dict[str, float]:
     """Compute the full metric suite in one pass.
 
@@ -403,6 +438,9 @@ def evaluate(
         popularity: Enables ``popularity_lift``.
         baseline_ranked: Enables ``serendipity``.
         gains: Optional graded gains for NDCG.
+        candidates: Enables ``candidate_share``. On a cold-start split, pass the
+            cold item ids — see :func:`candidate_share` for why popularity lift
+            alone is misleading there.
 
     Returns:
         A metric-name to value mapping, including ``n_queries_scored``.
@@ -424,4 +462,6 @@ def evaluate(
         results[f"popularity_lift@{k}"] = popularity_lift(ranked, popularity, k)
     if baseline_ranked is not None:
         results[f"serendipity@{k}"] = serendipity(ranked, rel, baseline_ranked, k)
+    if candidates is not None:
+        results[f"candidate_share@{k}"] = candidate_share(ranked, candidates, k)
     return results

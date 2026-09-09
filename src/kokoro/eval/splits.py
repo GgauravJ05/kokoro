@@ -74,15 +74,25 @@ class Interactions:
             feedback.
         timestamp: Unix seconds, shape ``(n,)``. Required by the temporal and
             leave-one-out splits.
+        catalog_size: Total items in the catalog, which is **not** the same as
+            the number of items appearing in this log. A cold-start split
+            removes every cold item from the training side, so a model sizing
+            itself from ``item.max() + 1`` would build a score matrix with no
+            column for the very items it is about to be evaluated on — and would
+            then raise, or worse, silently rank a different item space. Splits
+            propagate this so the catalog stays fixed.
     """
 
     user: npt.NDArray[np.int64]
     item: npt.NDArray[np.int64]
     rating: npt.NDArray[np.float32]
     timestamp: npt.NDArray[np.int64]
+    catalog_size: int | None = None
 
     def __post_init__(self) -> None:
         """Validate that all four arrays are 1-D and the same length."""
+        if self.catalog_size is not None and self.catalog_size < 0:
+            raise ValueError(f"catalog_size must be non-negative, got {self.catalog_size}")
         lengths = {a.shape for a in (self.user, self.item, self.rating, self.timestamp)}
         if len(lengths) != 1:
             raise ValueError(f"all arrays must share one shape, got {lengths}")
@@ -100,7 +110,9 @@ class Interactions:
 
     @property
     def n_items(self) -> int:
-        """One past the largest item id."""
+        """Catalog size: the explicit one when set, else one past the largest id."""
+        if self.catalog_size is not None:
+            return self.catalog_size
         return int(self.item.max()) + 1 if len(self) else 0
 
     def take(self, idx: npt.NDArray[np.int64]) -> Interactions:
@@ -110,6 +122,7 @@ class Interactions:
             item=self.item[idx],
             rating=self.rating[idx],
             timestamp=self.timestamp[idx],
+            catalog_size=self.n_items,
         )
 
     def positives_by_user(self, min_rating: float = 7.0) -> dict[int, set[int]]:

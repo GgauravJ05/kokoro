@@ -216,6 +216,7 @@ class BPRMatrixFactorization:
         k: int = 10,
         *,
         exclude_seen: bool = True,
+        candidates: npt.NDArray[np.int64] | None = None,
     ) -> npt.NDArray[np.int64]:
         """Rank the catalog for each user.
 
@@ -223,6 +224,7 @@ class BPRMatrixFactorization:
             users: User ids, shape ``(n_users,)``.
             k: Items per user.
             exclude_seen: Mask out training interactions before ranking.
+            candidates: Restrict the ranking to these item ids (cold-only protocol).
 
         Returns:
             Item ids, shape ``(n_users, k)``, best-first.
@@ -233,7 +235,9 @@ class BPRMatrixFactorization:
         """
         # Order matters: an unfitted model has _n_items == 0, which would
         # otherwise surface as a confusing ValueError about catalog size.
-        scores = self.score(users)
+        from kokoro.models.baselines import mask_to_candidates
+
+        scores = mask_to_candidates(self.score(users), candidates)
         if k > self._n_items:
             raise ValueError(f"k={k} exceeds catalog size {self._n_items}")
         if exclude_seen:

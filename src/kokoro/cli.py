@@ -5,12 +5,17 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from kokoro import __version__, provenance
+
+if TYPE_CHECKING:  # pragma: no cover
+    from kokoro.data.corpus import Corpus
+    from kokoro.models.base import Retriever
 
 app = typer.Typer(
     name="kokoro",
@@ -100,6 +105,9 @@ def benchmark(
         "user_holdout", "--split", help="Split strategy: user_holdout or cold_start."
     ),
     cold_cut_year: int = typer.Option(2014, help="Debut year cut for the cold_start split."),
+    cold_only: bool = typer.Option(
+        False, "--cold-only", help="Rank against cold candidates only (standard protocol)."
+    ),
     content: bool = typer.Option(
         False, "--content", help="Add the off-the-shelf content retriever (downloads an encoder)."
     ),
@@ -128,6 +136,7 @@ def benchmark(
             epochs=epochs,
             strategy=strategy,
             cold_cut_year=cold_cut_year,
+            cold_only=cold_only,
             content=content,
             encoder=encoder,
             trained=trained,
@@ -163,6 +172,36 @@ def benchmark(
     console.print(f"[green]report written to {save_results(results, results_out)}[/green]")
 
 
+def _add_content_models(
+    models: list[Retriever],
+    corpus: Corpus,
+    *,
+    content: bool,
+    encoder: str,
+    trained: str | None,
+) -> None:
+    """Append the content retrievers the flags asked for."""
+    import numpy as np
+
+    from kokoro.models.content import ContentRetriever, encode_texts
+
+    if content:
+        texts = corpus.item_texts()
+        console.print(f"encoding {len(texts):,} item texts with {encoder}…")
+        console.print(f"  example: [dim]{texts[0][:150]}[/dim]")
+        models.append(
+            ContentRetriever(
+                encode_texts(texts, model_name=encoder, show_progress=True),
+                name="content-offshelf",
+            )
+        )
+
+    if trained is not None:
+        vectors = np.load(trained)
+        console.print(f"loaded trained item embeddings {vectors.shape} from {trained}")
+        models.append(ContentRetriever(vectors.astype(np.float32), name="content-trained"))
+
+
 def _benchmark_corpus(
     corpus_path: str,
     results_out: str,
@@ -172,6 +211,7 @@ def _benchmark_corpus(
     epochs: int,
     strategy: str = "user_holdout",
     cold_cut_year: int = 2014,
+    cold_only: bool = False,
     content: bool = False,
     encoder: str = "sentence-transformers/all-MiniLM-L6-v2",
     trained: str | None = None,
@@ -179,10 +219,11 @@ def _benchmark_corpus(
     """Run the baselines against a built corpus."""
     from datetime import datetime, timezone
 
+    import numpy as np
+
     from kokoro.data.corpus import load_corpus
     from kokoro.eval.harness import run_benchmark, save_results, to_markdown_table
     from kokoro.eval.splits import cold_start_split, user_holdout_split
-    from kokoro.models.base import Retriever
     from kokoro.models.baselines import (
         ItemKNNRecommender,
         PopularityRecommender,
@@ -198,10 +239,20 @@ def _benchmark_corpus(
         f"corpus [bold]{c.version}[/bold]  "
         f"{len(data):,} interactions  {data.n_users:,} users  {data.n_items:,} items"
     )
+    candidates = None
     if strategy == "cold_start":
         cut = int(datetime(cold_cut_year, 1, 1, tzinfo=timezone.utc).timestamp())
         split = cold_start_split(data, c.item_debut, cut=cut)
         n_cold = split.meta["n_cold_items"]
+        cold_items = np.flatnonzero(c.item_debut[: data.n_items] >= cut).astype(np.int64)
+        answerable = len(set(split.test.item.tolist()))
+        if cold_only:
+            candidates = cold_items
+            console.print(
+                f"[yellow]protocol: cold-only — ranking restricted to the "
+                f"{len(cold_items):,} cold titles, of which {answerable:,} carry "
+                f"held-out ratings and can actually be correct.[/yellow]"
+            )
         console.print(
             f"[yellow]split: cold_start at {cold_cut_year} — {n_cold:,} titles have "
             f"zero training interactions. Collaborative models cannot represent them "
@@ -223,32 +274,24 @@ def _benchmark_corpus(
         ItemKNNRecommender(k_neighbors=50),
         BPRMatrixFactorization(n_factors=64, n_epochs=epochs, lr=0.05, seed=seed),
     ]
-    if content:
-        from kokoro.models.content import ContentRetriever, encode_texts
-
-        texts = c.item_texts()
-        console.print(f"encoding {len(texts):,} item texts with {encoder}…")
-        console.print(f"  example: [dim]{texts[0][:150]}[/dim]")
-        embeddings = encode_texts(texts, model_name=encoder, show_progress=True)
-        models.append(ContentRetriever(embeddings, name="content-offshelf"))
-
-    if trained is not None:
-        import numpy as np
-
-        from kokoro.models.content import ContentRetriever as TrainedRetriever
-
-        vectors = np.load(trained)
-        console.print(f"loaded trained item embeddings {vectors.shape} from {trained}")
-        models.append(TrainedRetriever(vectors.astype(np.float32), name="content-trained"))
+    _add_content_models(models, c, content=content, encoder=encoder, trained=trained)
 
     with console.status("fitting and scoring…"):
-        results = run_benchmark(models, split, k=k)
+        results = run_benchmark(
+            models,
+            split,
+            k=k,
+            # candidates -> what is reported; restrict_to -> what may be ranked.
+            candidates=cold_items if strategy == "cold_start" else None,
+            restrict_to=candidates,
+        )
 
     for r in results:
         r["corpus_version"] = c.version
         r["max_users_subsample"] = max_users
         r["n_interactions"] = len(data)
         r["split_strategy"] = strategy
+        r["protocol"] = "cold_only" if cold_only else "full_catalog"
 
     console.print()
     console.print(to_markdown_table(results))

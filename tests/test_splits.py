@@ -144,3 +144,44 @@ def test_user_holdout_works_without_timestamps(interactions: Interactions) -> No
     split = user_holdout_split(undated)
     assert len(split.test) > 0
     assert len(split.train) + len(split.test) == len(undated)
+
+
+def test_catalog_size_survives_a_split() -> None:
+    """A cold-start split removes every cold item from train, so a model sizing
+    itself from `item.max() + 1` would have no column for the items it is about
+    to be evaluated on."""
+    from kokoro.eval.splits import cold_start_split
+
+    data = Interactions(
+        user=np.array([0, 0, 1, 1], np.int64),
+        item=np.array([0, 1, 1, 2], np.int64),
+        rating=np.full(4, 9.0, np.float32),
+        timestamp=np.arange(4, dtype=np.int64),
+        catalog_size=50,
+    )
+    assert data.n_items == 50
+
+    split = cold_start_split(data, np.array([100] * 50, np.int64), cut=1_000_000)
+    assert split.train.n_items == 50, "the catalog does not shrink because a split did"
+    assert split.test.n_items == 50
+
+
+def test_catalog_size_defaults_to_observed_ids() -> None:
+    data = Interactions(
+        user=np.array([0, 1], np.int64),
+        item=np.array([3, 7], np.int64),
+        rating=np.full(2, 8.0, np.float32),
+        timestamp=np.zeros(2, np.int64),
+    )
+    assert data.n_items == 8
+
+
+def test_catalog_size_rejects_negative_values() -> None:
+    with pytest.raises(ValueError, match="catalog_size must be non-negative"):
+        Interactions(
+            user=np.array([0], np.int64),
+            item=np.array([0], np.int64),
+            rating=np.array([1.0], np.float32),
+            timestamp=np.array([0], np.int64),
+            catalog_size=-1,
+        )

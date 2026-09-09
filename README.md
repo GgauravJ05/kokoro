@@ -105,135 +105,62 @@ not a result.
 
 ### Cold-start: the headline split
 
-`--split cold_start --cold-cut-year 2014`. 998 titles have **zero** training
-interactions.
+`--split cold_start --cold-cut-year 2014`. 1,491 titles have **zero** training
+interactions; 998 of them carry held-out ratings and can actually be scored.
 
-| model | recall@10 | ndcg@10 | mrr@10 | coverage@10 | pop. lift |
-|---|---|---|---|---|---|
-| random | 0.0016 | 0.0031 | 0.0076 | 0.810 | 1.0× |
-| popularity | **0.0000** | **0.0000** | **0.0000** | 0.008 | 38.6× |
-| item-kNN | **0.0000** | **0.0000** | **0.0000** | 0.021 | 31.9× |
-| BPR-MF | **0.0000** | **0.0000** | **0.0000** | 0.051 | 27.2× |
-| content, off-the-shelf | 0.0090 | 0.0112 | 0.0216 | 0.083 | 2.4× |
-| **content, contrastively trained** | **0.0163** | **0.0165** | **0.0279** | **0.133** | 3.3× |
+Two protocols, because they answer different questions and only reporting one
+is how cold-start results get overstated.
 
-Every collaborative model scores exactly zero, and this is not a bug — it is
-arithmetic. A model whose only representation of an item is who interacted with
-it has *no* representation of an item nobody has interacted with. Random beats
-all three by chance alone.
+**Cold-only** — rank the new titles against each other. The standard protocol,
+and the one that isolates "can this model order titles it has never seen".
 
-The content retriever is the first model here that can answer this split at all:
-**3× random**, and a popularity lift of 1.69× against their 17–25×. It embeds a
-title from its metadata text, so a show that aired yesterday is rankable today.
+| model | recall@10 | ndcg@10 | mrr@10 | vs. random |
+|---|---|---|---|---|
+| popularity | 0.0016 | 0.0032 | 0.0084 | 0.19× |
+| item-kNN | 0.0016 | 0.0032 | 0.0084 | 0.19× |
+| BPR-MF | 0.0062 | 0.0147 | 0.0355 | 0.87× |
+| random | 0.0078 | 0.0170 | 0.0413 | 1.00× |
+| content, off-the-shelf | 0.0274 | 0.0597 | 0.1430 | 3.51× |
+| **content, contrastively trained** | **0.0487** | **0.0845** | **0.1688** | **4.97×** |
 
-**Contrastive training on review text beats the off-the-shelf encoder by 47%
-NDCG and 80% recall, while raising catalog coverage 60%.** Both rows use the
-identical MiniLM backbone and the identical user-profile logic; the only
-difference is a learned projection trained with InfoNCE on
-`(review segment → title metadata)` pairs. So the lift is attributable to the
-objective, not to a bigger encoder.
+Every collaborative model is **at or below random** here. Popularity and
+item-kNN land at 0.19× because they assign identical scores to all cold items
+and therefore return one constant list to every user — `coverage@10` of 0.001
+and `gini` of 0.999 say the same thing. BPR-MF is indistinguishable from random.
 
-Two honest caveats on that number. The absolute values are low — cold-start
-retrieval over 998 unseen titles is hard, and 0.0165 NDCG is a first result, not
-a finished one. And popularity lift went *up* (2.4× → 3.3×), so training bought
-accuracy partly by drifting toward popular titles; that is a regression worth
-fixing, and it is visible only because the beyond-accuracy metrics are reported
-next to the accuracy ones.
+**Full catalog** — rank new titles against the entire back catalog. Harsher and
+more realistic; dominated by warm distractors.
 
-## Quickstart
+| model | ndcg@10 | candidate_share@10 | popularity_lift@10 |
+|---|---|---|---|
+| popularity | 0.0000 | **0.000** | 38.6× |
+| item-kNN | 0.0000 | **0.000** | 31.9× |
+| BPR-MF | 0.0000 | **0.000** | 28.2× |
+| content, off-the-shelf | 0.0112 | 0.064 | 2.4× |
+| **content, contrastively trained** | **0.0165** | **0.109** | 3.3× |
 
-```bash
-git clone https://github.com/GgauravJ05/kokoro.git
-cd kokoro
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+#### A metric that was being misread
 
-kokoro provenance          # authorship record for this build
-kokoro config              # resolved settings
-kokoro benchmark           # baseline suite on synthetic data (harness smoke test)
-```
+An earlier version of this README called the trained model's higher popularity
+lift (2.4× → 3.3×) a regression. That was wrong, and the correction is worth
+stating plainly because it is a trap this whole split invites.
 
-Ingest real titles (rate-limited, respects AniList's published budget):
+On a cold-start split **every correct answer has zero training popularity, by
+construction**. So the oracle popularity lift is `0.00×`, and a model scores a
+*high* lift precisely by filling its slots with warm items that cannot possibly
+be right. Popularity lift there does not mean "biased toward blockbusters"; it
+means "wasted the ranking".
 
-```bash
-cp .env.example .env
-kokoro ingest --media-type ANIME --max-pages 20 --out data/raw/titles.jsonl
-```
+`candidate_share@10` says it directly: what fraction of the top 10 was even
+eligible. The collaborative models sit at **0.000** — not one answerable item in
+any list, which is exactly why their NDCG is zero and their lift is 28–39×. The
+trained content model reaches 0.109 against off-the-shelf's 0.064, **69% more
+eligible items surfaced**. Training improved this; it did not regress it.
 
-## Method
-
-```
-                  ┌──────────────────────┐
-   user query ───▶│   query tower (BERT) │──┐
-                  └──────────────────────┘  │
-                                            ├──▶ shared 256-d space ──▶ HNSW ──▶ top-k
-   reviews  ──┐   ┌──────────────────────┐  │            ▲
-   synopsis ──┼──▶│   item tower (BERT)  │──┘            │
-   tags     ──┘   └──────────┬───────────┘               │
-                             │                           │
-                             ▼                           │
-                    ┌────────────────┐                   │
-                    │ mood bottleneck│──▶ 8 named axes ──┴──▶ explanation
-                    └────────────────┘
-   arc-bound   ┌─────────────────────┐
-   segments ──▶│ trajectory encoder  │──▶ gated into item embedding
-               │  (dilated 1-D CNN)  │──▶ shape queries + warnings
-               └─────────────────────┘
-```
-
-**Towers are untied.** Queries are imperative and second-person; reviews are
-past-tense and discursive. Tying the encoders measurably hurts, and the
-tied-vs-untied comparison is a row in the ablation table.
-
-**Hard negatives matter more than batch size here.** A random negative for
-*Violet Evergarden* is some sports comedy the model separates trivially. The
-useful negative is another beautiful, slow, melancholy drama that nevertheless
-leaves you feeling different — only same-genre mining produces those.
-
-**The bottleneck is anchored, not just narrow.** Without the anchor alignment
-loss the axes are an arbitrary rotation and the interpretability claim is false.
-The ablation that removes it is what proves the claim is real.
-
-## Evaluation
-
-Most anime-recommender projects report zero metrics. This one reports two
-families, and treats the second as equally load-bearing.
-
-**Accuracy** — `recall@k`, `precision@k`, `ndcg@k`, `mrr@k`, `hit_rate@k`.
-
-**Beyond-accuracy** — a recommender can top the accuracy table by showing the
-same fifty popular titles to everyone, which is *the* known failure mode on a
-catalog this long-tailed. `coverage`, `gini`, `intra_list_diversity`,
-`serendipity` and `popularity_lift` are what catch it.
-
-**Splits, in increasing honesty:**
-
-| Split | What it proves | Reported as |
-|---|---|---|
-| `random` | optimistic ceiling | upper bound only |
-| `leave_one_out` | comparable to published baselines | needs timestamps — unavailable |
-| `temporal` | can we predict *tomorrow* from *today* | **not computable on this corpus** |
-| `user_holdout` | in-catalog accuracy without timestamps | secondary |
-| `cold_start` | can a brand-new title be placed at all | **headline** |
-
-**Why cold-start is the headline.** The rating source carries no interaction
-timestamps, so a temporal split cannot be computed honestly and is not reported.
-Debut dates *are* available from the catalog, which makes a real cold-start split
-possible — and it happens to be the split this project is actually about. Reviews
-cover 1.7% of the catalog, so the interesting question was never "can we re-rank
-titles everyone has already rated", it is "can a title with zero interactions be
-placed correctly from its content alone".
-
-**Baselines that must be beaten:** random, popularity, item-kNN, BM25 on
-synopsis, off-the-shelf embedding similarity, and a raw LLM prompt. That last
-one is the real bar — if asking a frontier model directly does as well, this
-project has no reason to exist. The design targets where it wins: latency, cost
-per query, catalog coverage, calibrated axes, and titles too new or obscure to
-be memorised.
-
-The harness was written **before** the models, on purpose. A harness authored
-after the model it evaluates grows whatever affordance makes that model look
-good.
+The lesson generalises: a beyond-accuracy metric is only interpretable against
+its oracle value on the split you are running. `popularity_lift` is meaningful
+on `user_holdout`, where the truth is popularity-skewed, and misleading on
+`cold_start`, where it is not.
 
 ## Roadmap
 

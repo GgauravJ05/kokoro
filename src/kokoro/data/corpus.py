@@ -173,6 +173,7 @@ def load_corpus(
         # temporal split to be obviously degenerate rather than quietly wrong;
         # use user_holdout_split on this corpus.
         timestamp=np.zeros(len(ratings), dtype=np.int64),
+        catalog_size=len(item_index),
     )
 
     return Corpus(

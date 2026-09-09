@@ -47,6 +47,8 @@ def run_benchmark(
     min_rating: float = 7.0,
     embeddings: npt.NDArray[np.float64] | None = None,
     baseline_name: str = "popularity",
+    candidates: npt.NDArray[np.int64] | None = None,
+    restrict_to: npt.NDArray[np.int64] | None = None,
 ) -> list[BenchmarkResult]:
     """Fit and score every model on one split.
 
@@ -59,6 +61,15 @@ def run_benchmark(
         embeddings: Optional item embeddings, enabling intra-list diversity.
         baseline_name: Which model's rankings serve as the "obvious"
             reference for serendipity. Absent, serendipity is skipped.
+        candidates: Item ids eligible to be correct. On a cold-start split these
+            are the cold items; passing them adds ``candidate_share``, which is
+            what makes popularity lift interpretable there. This affects
+            *reporting* only — models still rank the whole catalog.
+        restrict_to: Item ids models may rank at all. Distinct from
+            ``candidates`` on purpose: restricting the ranking changes the task
+            (the cold-only protocol), whereas ``candidates`` only changes what
+            is measured. Conflating them turns a full-catalog run into a
+            cold-only run without saying so.
 
     Returns:
         One :class:`BenchmarkResult` per model, in input order.
@@ -87,7 +98,7 @@ def run_benchmark(
         fit_s = time.perf_counter() - t0
 
         t0 = time.perf_counter()
-        rankings[model.name] = model.recommend(users, k=k)
+        rankings[model.name] = model.recommend(users, k=k, candidates=restrict_to)
         query_s = (time.perf_counter() - t0) / max(users.size, 1)
         timings[model.name] = fit_s
         timings[f"{model.name}:query"] = query_s
@@ -104,6 +115,7 @@ def run_benchmark(
             embeddings=embeddings,
             popularity=popularity,
             baseline_ranked=baseline if model.name != baseline_name else None,
+            candidates=candidates.tolist() if candidates is not None else None,
         )
         results.append(
             BenchmarkResult(

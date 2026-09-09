@@ -46,6 +46,7 @@ class Retriever(Protocol):
         k: int = 10,
         *,
         exclude_seen: bool = True,
+        candidates: npt.NDArray[np.int64] | None = None,
     ) -> npt.NDArray[np.int64]:
         """Rank the catalog for each user.
 
@@ -55,6 +56,10 @@ class Retriever(Protocol):
             exclude_seen: Drop items the user already interacted with in the
                 training data. Leaving this on is what makes the numbers
                 comparable to published baselines.
+            candidates: Restrict the ranking to these item ids. Used for the
+                cold-only cold-start protocol, where ranking against the whole
+                back catalog measures distractor avoidance rather than the
+                ability to order new titles among themselves.
 
         Returns:
             Item ids, shape ``(n_users, k)``, best-first.

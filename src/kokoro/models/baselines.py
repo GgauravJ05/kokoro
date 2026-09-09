@@ -25,6 +25,31 @@ if TYPE_CHECKING:  # pragma: no cover
 __all__ = ["ItemKNNRecommender", "PopularityRecommender", "RandomRecommender"]
 
 
+def mask_to_candidates(
+    scores: npt.NDArray[np.float64], candidates: npt.NDArray[np.int64] | None
+) -> npt.NDArray[np.float64]:
+    """Restrict a score matrix to an eligible candidate set, in place.
+
+    Used for the cold-only cold-start protocol: ranking a brand-new title
+    against the entire back catalog measures mostly how well a model avoids
+    warm distractors, which is a different question from whether it can order
+    new titles sensibly among themselves. Both protocols are reported.
+
+    Args:
+        scores: Score matrix of shape ``(n_users, n_items)``. Mutated.
+        candidates: Eligible item ids, or ``None`` to leave scores untouched.
+
+    Returns:
+        The same array, with ineligible columns set to ``-inf``.
+    """
+    if candidates is None:
+        return scores
+    keep = np.zeros(scores.shape[1], dtype=bool)
+    keep[candidates] = True
+    scores[:, ~keep] = -np.inf
+    return scores
+
+
 def _top_k(scores: npt.NDArray[np.float64], k: int) -> npt.NDArray[np.int64]:
     """Return the indices of the top ``k`` scores per row, best-first."""
     part = np.argpartition(-scores, kth=k - 1, axis=1)[:, :k]
@@ -62,7 +87,12 @@ class PopularityRecommender:
         return self
 
     def recommend(
-        self, users: npt.NDArray[np.int64], k: int = 10, *, exclude_seen: bool = True
+        self,
+        users: npt.NDArray[np.int64],
+        k: int = 10,
+        *,
+        exclude_seen: bool = True,
+        candidates: npt.NDArray[np.int64] | None = None,
     ) -> npt.NDArray[np.int64]:
         """Return the top ``k`` most popular unseen items per user.
 
@@ -72,6 +102,7 @@ class PopularityRecommender:
         if self.popularity is None:
             raise RuntimeError("call fit() before recommending")
         scores = np.tile(self.popularity, (users.shape[0], 1))
+        scores = mask_to_candidates(scores, candidates)
         if exclude_seen:
             for row, u in enumerate(users.tolist()):
                 seen = self._seen.get(int(u))
@@ -102,13 +133,19 @@ class RandomRecommender:
         return self
 
     def recommend(
-        self, users: npt.NDArray[np.int64], k: int = 10, *, exclude_seen: bool = True
+        self,
+        users: npt.NDArray[np.int64],
+        k: int = 10,
+        *,
+        exclude_seen: bool = True,
+        candidates: npt.NDArray[np.int64] | None = None,
     ) -> npt.NDArray[np.int64]:
         """Return ``k`` distinct random item ids per user."""
         del exclude_seen  # a random ranker has nothing to exclude against
         rng = np.random.default_rng(self.seed)
+        pool = np.arange(self._n_items) if candidates is None else np.asarray(candidates)
         return np.stack(
-            [rng.choice(self._n_items, size=k, replace=False) for _ in range(users.shape[0])]
+            [rng.choice(pool, size=k, replace=False) for _ in range(users.shape[0])]
         ).astype(np.int64)
 
 
@@ -208,7 +245,12 @@ class ItemKNNRecommender:
         return self
 
     def recommend(
-        self, users: npt.NDArray[np.int64], k: int = 10, *, exclude_seen: bool = True
+        self,
+        users: npt.NDArray[np.int64],
+        k: int = 10,
+        *,
+        exclude_seen: bool = True,
+        candidates: npt.NDArray[np.int64] | None = None,
     ) -> npt.NDArray[np.int64]:
         """Score items by similarity to everything the user has interacted with.
 
@@ -219,6 +261,7 @@ class ItemKNNRecommender:
             raise RuntimeError("call fit() before recommending")
         profiles = self._matrix[users]
         scores = np.asarray((profiles @ self.similarity).todense())
+        scores = mask_to_candidates(scores, candidates)
         if exclude_seen:
             scores[np.asarray(profiles.todense()) > 0] = -np.inf
         return _top_k(scores, k)

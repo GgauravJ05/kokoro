@@ -108,3 +108,41 @@ def test_evaluate_includes_optionals_only_when_given() -> None:
 def test_coverage_rejects_bad_catalog_size(n_items: int) -> None:
     with pytest.raises(ValueError, match="n_items must be positive"):
         metrics.catalog_coverage([[1]], n_items=n_items, k=1)
+
+
+def test_candidate_share_counts_eligible_slots() -> None:
+    """On a cold-start split this is what popularity lift was being misread as."""
+    assert metrics.candidate_share([[1, 2, 3, 4]], candidates=[1, 2], k=4) == pytest.approx(0.5)
+    assert metrics.candidate_share([[1, 2]], candidates=[1, 2], k=2) == pytest.approx(1.0)
+    assert metrics.candidate_share([[9, 8]], candidates=[1, 2], k=2) == pytest.approx(0.0)
+
+
+def test_candidate_share_with_no_candidates_is_zero() -> None:
+    assert metrics.candidate_share([[1, 2]], candidates=[], k=2) == 0.0
+
+
+def test_candidate_share_averages_over_queries() -> None:
+    ranked = [[1, 9], [1, 2]]
+    assert metrics.candidate_share(ranked, candidates=[1, 2], k=2) == pytest.approx(0.75)
+
+
+def test_evaluate_adds_candidate_share_only_when_asked() -> None:
+    base = metrics.evaluate([[1, 2, 3]], [{1}], n_items=10, k=3)
+    assert "candidate_share@3" not in base
+    with_c = metrics.evaluate([[1, 2, 3]], [{1}], n_items=10, k=3, candidates=[1, 2])
+    assert with_c["candidate_share@3"] == pytest.approx(2 / 3)
+
+
+def test_popularity_lift_is_degenerate_when_truth_has_zero_popularity() -> None:
+    """The trap candidate_share exists to expose: on a cold-start split every
+    correct answer has zero training popularity, so a HIGH lift means the model
+    spent its slots on warm items that could not possibly be right."""
+    popularity = np.array([100.0, 100.0, 0.0, 0.0])  # items 2,3 are cold
+    warm_ranking = np.array([[0, 1]])
+    cold_ranking = np.array([[2, 3]])
+
+    assert metrics.popularity_lift(warm_ranking, popularity, k=2) > 1.0
+    assert metrics.popularity_lift(cold_ranking, popularity, k=2) == 0.0
+    # candidate_share says the same thing without the misreading.
+    assert metrics.candidate_share(warm_ranking, candidates=[2, 3], k=2) == 0.0
+    assert metrics.candidate_share(cold_ranking, candidates=[2, 3], k=2) == 1.0
