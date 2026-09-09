@@ -9,7 +9,7 @@ What is configured, what is deferred, and how to finish the job.
 
 | Setting | Value | Why |
 |---|---|---|
-| Visibility | **private** | Polishing before the work is public |
+| Visibility | **public** | Applied 2026-09-09 |
 | Merge commits | disabled | Keeps `main` linear and bisectable |
 | Squash / rebase merge | enabled | One commit per PR |
 | Delete branch on merge | enabled | No stale branch accumulation |
@@ -21,50 +21,62 @@ What is configured, what is deferred, and how to finish the job.
 | Issues | enabled, templated | Bug / feature / research question |
 | Wiki, Projects | disabled | Docs live in the repo |
 
-## Deferred: branch protection
+## Branch protection — applied, and corrected
 
-GitHub gates **repository rulesets behind a public repo or a paid plan**, so the
-policy could not be applied to a free private repository. It is not lost — it is
-checked in at [`.github/rulesets/main-protection.json`](../.github/rulesets/main-protection.json)
-and applied by one command the moment the repo goes public:
+The ruleset in [`.github/rulesets/main-protection.json`](../.github/rulesets/main-protection.json)
+is active on `main`. It requires:
 
-```bash
-gh repo edit GgauravJ05/kokoro --visibility public --accept-visibility-change-consequences
-./scripts/setup_branch_protection.sh
-```
-
-That ruleset makes `main` require:
-
-- a pull request with **1 approving review**
-- **CODEOWNERS** review — every path is owned, so nothing merges unreviewed
+- a **pull request** for every change
 - **all CI checks green** and the branch up to date with `main`
-- **linear history** and **signed commits**
+- **linear history**
 - **no force pushes**, **no deletion**
 
-Until then, `main` is technically pushable directly. The pre-commit hook
-`no-commit-to-branch` blocks accidental local commits to `main`, which covers the
-realistic failure mode for a solo repo.
+### Two rules were removed, and why
 
-## Deferred: CodeQL
+The ruleset as originally written was unworkable for a sole maintainer, and
+applying it briefly locked the repository:
 
-The CodeQL workflow is committed and correct, but Advanced Security is
-unavailable on a free private repository. The job is guarded by
+**`required_signatures`.** Every commit here is unsigned and commit signing is
+not configured, so this rule rejects *every* push to `main`. Enabling it means
+first setting up SSH or GPG signing and registering the public key with GitHub
+as a signing key — worth doing, but it is a prerequisite, not a side effect.
 
-```yaml
-if: github.event_name == 'schedule' || github.event.repository.visibility == 'public'
+**`required_approving_review_count: 1`** plus **`require_code_owner_review`.**
+GitHub does not permit approving your own pull request. With one maintainer and
+no bypass actors, nothing could ever be merged. The pull-request requirement is
+kept at **zero** approvals, which still routes every change through a PR and its
+status checks — the part that actually protects the branch.
+
+Restore either rule the moment a second maintainer exists, or once signing is
+configured.
+
+### Enabling signed commits later
+
+```bash
+ssh-keygen -t ed25519 -C "signing" -f ~/.ssh/git_signing
+git config --global gpg.format ssh
+git config --global user.signingkey ~/.ssh/git_signing.pub
+git config --global commit.gpgsign true
+# then add ~/.ssh/git_signing.pub to GitHub as a SIGNING key (not an auth key)
 ```
 
-so it skips cleanly now and starts running the moment visibility flips — no red
-badge in the meantime.
+Afterwards, re-add the `required_signatures` rule to the ruleset JSON and rerun
+`./scripts/setup_branch_protection.sh`.
 
-## Going public: the checklist
+## CodeQL
 
-1. `make check` green
-2. `kokoro benchmark` on the real corpus, results table pasted into the README
-3. `gh repo edit --visibility public --accept-visibility-change-consequences`
-4. `./scripts/setup_branch_protection.sh`
-5. Confirm the CI, CodeQL and licence badges render
-6. Tag `v0.1.0` — the release workflow builds, validates and attaches a
+Now active. The workflow was guarded on repository visibility while the repo was
+private (Advanced Security is unavailable on free private repos), and that guard
+now passes, so CodeQL runs on push and weekly.
+
+## Going public: done
+
+1. ✅ `make check` green
+2. ✅ Results measured and reported, including the negative ones
+3. ✅ `gh repo edit --visibility public`
+4. ✅ `./scripts/setup_branch_protection.sh` (then corrected — see above)
+5. ⬜ Confirm the CI, CodeQL and licence badges render
+6. ⬜ Tag `v0.1.0` — the release workflow builds, validates and attaches a
    provenance record
 
 ## Attribution surfaces
