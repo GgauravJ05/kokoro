@@ -15,9 +15,11 @@ satisfy that; do not remove it.
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from kokoro import __version__, provenance
@@ -50,10 +52,9 @@ class Recommendation(BaseModel):
         default_factory=list,
         description="Review sentences that drove the match, for user-visible justification.",
     )
-    trajectory_warning: str | None = Field(
-        default=None,
-        description="Set when the mood curve inverts, e.g. 'comfortable until episode 8'.",
-    )
+    year: int | None = None
+    episodes: int | None = None
+    members: int = Field(default=0, description="MyAnimeList audience size, for display.")
 
 
 class RecommendResponse(BaseModel):
@@ -65,6 +66,9 @@ class RecommendResponse(BaseModel):
     model_version: str
     catalog_size: int
 
+
+#: The demo page lives beside this module so it ships with the package.
+_STATIC = Path(__file__).parent / "static"
 
 app = FastAPI(
     title="Kokoro",
@@ -121,6 +125,12 @@ def get_engine() -> Engine:
     return _engine
 
 
+@app.get("/", include_in_schema=False)
+async def index() -> FileResponse:
+    """Serve the demo page."""
+    return FileResponse(_STATIC / "index.html")
+
+
 @app.get("/health")
 async def health() -> dict[str, object]:
     """Liveness probe. Reports whether a model is loaded, without loading one."""
@@ -162,6 +172,7 @@ async def recommend(
     q: Annotated[str, Query(min_length=3, max_length=500, description="Free-text mood query.")],
     k: Annotated[int, Query(ge=1, le=50)] = 10,
     media_type: Annotated[str, Query(pattern="^(ANIME|MANGA)$")] = "ANIME",
+    min_members: Annotated[int, Query(ge=0, le=5_000_000)] = 0,
 ) -> Any:
     """Retrieve titles matching a free-text mood query.
 
@@ -173,7 +184,7 @@ async def recommend(
     engine = get_engine()
 
     start = time.perf_counter()
-    hits = engine.search(q, k=k)
+    hits = engine.search(q, k=k, min_members=min_members)
     elapsed = (time.perf_counter() - start) * 1000
 
     return RecommendResponse(
@@ -184,6 +195,9 @@ async def recommend(
                 romaji=h.title,
                 score=h.score,
                 evidence=list(h.tags[:5]),
+                year=h.year,
+                episodes=h.episodes,
+                members=h.members,
             )
             for h in hits
         ],

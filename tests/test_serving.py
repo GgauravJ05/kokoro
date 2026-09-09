@@ -174,3 +174,69 @@ def test_recommend_returns_the_documented_shape(client: TestClient) -> None:
     assert body["latency_ms"] >= 0
     first = body["results"][0]
     assert {"title_id", "romaji", "score"} <= set(first)
+
+
+def test_demo_page_is_served_and_self_contained(client: TestClient) -> None:
+    """The page must render from the same origin with no external JS host, or it
+    breaks behind any CSP a deployment target imposes."""
+    response = client.get("/")
+    assert response.status_code == 200
+    body = response.text
+    assert "<title>Kokoro" in body
+    assert "/recommend" in body, "the page must call the API on the same origin"
+    assert "<script src=" not in body, "no external script hosts"
+
+
+def test_demo_page_ships_inside_the_package() -> None:
+    """Packaged as data, so `pip install kokoro-retrieval` can serve the demo."""
+    from kokoro.serve import app as app_module
+
+    assert (app_module._STATIC / "index.html").is_file()
+
+
+@needs_model
+def test_popularity_floor_raises_the_audience_of_results() -> None:
+    """A serving-side presentation filter, deliberately absent from evaluation."""
+    from kokoro.serve.engine import Engine
+
+    engine = Engine(ARTIFACTS, CORPUS, index="exact")
+    query = "comfort watch for a bad day"
+
+    unfiltered = engine.search(query, k=10)
+    filtered = engine.search(query, k=10, min_members=50_000)
+
+    assert all(h.members >= 50_000 for h in filtered), "the floor must actually hold"
+    assert len(filtered) == 10, "over-fetching must still return a full page"
+
+    median = lambda hits: sorted(h.members for h in hits)[len(hits) // 2]  # noqa: E731
+    assert median(filtered) > median(unfiltered)
+
+
+@needs_model
+def test_popularity_floor_still_returns_ranked_results() -> None:
+    from kokoro.serve.engine import Engine
+
+    engine = Engine(ARTIFACTS, CORPUS, index="exact")
+    hits = engine.search("epic space opera", k=5, min_members=100_000)
+    scores = [h.score for h in hits]
+    assert scores == sorted(scores, reverse=True)
+    assert len({h.anime_id for h in hits}) == len(hits)
+
+
+@needs_model
+def test_an_impossible_floor_degrades_gracefully() -> None:
+    """No catalog title has 50M members; the engine must not crash or hang."""
+    from kokoro.serve.engine import Engine
+
+    engine = Engine(ARTIFACTS, CORPUS, index="exact")
+    hits = engine.search("anything at all", k=5, min_members=50_000_000)
+    assert isinstance(hits, list), "an unsatisfiable filter falls back, it does not raise"
+
+
+@needs_model
+def test_recommend_exposes_min_members(client: TestClient) -> None:
+    client.get("/ready")
+    body = client.get(
+        "/recommend", params={"q": "a comfort watch", "k": 5, "min_members": 100_000}
+    ).json()
+    assert all(r["members"] >= 100_000 for r in body["results"])

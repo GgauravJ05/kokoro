@@ -1,0 +1,285 @@
+<!doctype html>
+<!--
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Copyright (C) 2026 Gaurav Jadhav <gauravmakarandjadhav@gmail.com>
+  Canonical source: https://github.com/GgauravJ05/kokoro
+
+  Served at / by kokoro.serve.app. Talks to /recommend on the same origin.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kokoro — mood search for anime</title>
+<meta name="description" content="Search anime by how it feels. Mood-conditioned retrieval trained on user review prose.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground:#f6f4f9; --surface:#fffdff; --surface-2:#efecf5;
+    --ink:#191527; --ink-2:#4a4360; --muted:#6f6885;
+    --line:#e0dbea; --line-strong:#cbc4da;
+    --accent:#a63a63; --accent-soft:#f3e2e9;
+    --cool:#3d5a99; --cool-soft:#e3e8f4;
+    --shadow:0 1px 2px rgba(25,21,39,.06), 0 8px 24px -18px rgba(25,21,39,.34);
+    --f-display:"Newsreader","Iowan Old Style",Georgia,serif;
+    --f-body:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#131020; --surface:#1b1729; --surface-2:#241f36;
+      --ink:#ece8f6; --ink-2:#c3bcd6; --muted:#948caa;
+      --line:#2c2640; --line-strong:#3d3555;
+      --accent:#e0748f; --accent-soft:#331d29;
+      --cool:#8aa6de; --cool-soft:#1e2537;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -20px rgba(0,0,0,.9);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#131020; --surface:#1b1729; --surface-2:#241f36;
+    --ink:#ece8f6; --ink-2:#c3bcd6; --muted:#948caa;
+    --line:#2c2640; --line-strong:#3d3555;
+    --accent:#e0748f; --accent-soft:#331d29;
+    --cool:#8aa6de; --cool-soft:#1e2537;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -20px rgba(0,0,0,.9);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--f-body); font-size:16px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page { max-width:54rem; margin:0 auto; padding:2.5rem 1.25rem 5rem; }
+  a { color:var(--accent); }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:4px; }
+
+  header { display:grid; gap:.6rem; margin-bottom:1.75rem; }
+  .brand { display:flex; align-items:baseline; gap:.7rem; flex-wrap:wrap; }
+  .glyph { font-family:var(--f-display); font-size:2.1rem; color:var(--accent); line-height:1; }
+  h1 { margin:0; font-family:var(--f-display); font-size:clamp(1.7rem,4vw,2.3rem);
+       font-weight:500; letter-spacing:-.015em; }
+  .tagline { margin:0; color:var(--ink-2); max-width:52ch; font-size:1.02rem; }
+  .tagline em { font-style:italic; color:var(--accent); }
+
+  form { display:flex; gap:.6rem; margin:1.5rem 0 .85rem; flex-wrap:wrap; }
+  input[type=search] {
+    flex:1 1 22rem; min-width:0; padding:.85rem 1rem; font:inherit;
+    color:var(--ink); background:var(--surface);
+    border:1px solid var(--line-strong); border-radius:8px; box-shadow:var(--shadow);
+  }
+  input[type=search]::placeholder { color:var(--muted); }
+  button {
+    padding:.85rem 1.5rem; font:inherit; font-weight:600; cursor:pointer;
+    color:#fff; background:var(--accent); border:none; border-radius:8px;
+  }
+  button:disabled { opacity:.55; cursor:progress; }
+
+  .chips { display:flex; flex-wrap:wrap; gap:.45rem; margin-bottom:1.1rem; }
+  .chip {
+    font-size:.83rem; padding:.34rem .7rem; cursor:pointer;
+    color:var(--ink-2); background:var(--surface-2);
+    border:1px solid var(--line); border-radius:999px;
+  }
+  .chip:hover { border-color:var(--accent); color:var(--accent); }
+
+  .controls {
+    display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap;
+    font-family:var(--f-mono); font-size:.76rem; color:var(--muted);
+    padding-bottom:1rem; border-bottom:1px solid var(--line);
+  }
+  .controls label { display:flex; align-items:center; gap:.45rem; cursor:pointer; }
+  .meter { color:var(--ink-2); font-variant-numeric:tabular-nums; }
+  .meter b { color:var(--accent); font-weight:500; }
+
+  ol { list-style:none; margin:1.25rem 0 0; padding:0; display:grid; gap:.6rem; }
+  .hit {
+    display:grid; grid-template-columns:2.4rem 1fr auto; gap:0 1rem;
+    align-items:baseline; padding:.9rem 1.1rem;
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:8px; box-shadow:var(--shadow);
+  }
+  .rank { font-family:var(--f-mono); font-size:.82rem; color:var(--muted); }
+  .hit h3 { margin:0; font-size:1.02rem; font-weight:600; letter-spacing:-.005em; }
+  .sub { grid-column:2; font-size:.82rem; color:var(--muted); margin-top:.15rem; }
+  .tags { grid-column:2; display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.5rem; }
+  .tag {
+    font-family:var(--f-mono); font-size:.7rem; padding:.15rem .45rem;
+    color:var(--cool); background:var(--cool-soft); border-radius:4px;
+  }
+  .score {
+    grid-row:1/3; font-family:var(--f-mono); font-size:.8rem;
+    color:var(--accent); font-variant-numeric:tabular-nums; text-align:right;
+  }
+
+  .note {
+    margin-top:2.25rem; padding:1rem 1.2rem; font-size:.88rem; color:var(--ink-2);
+    background:var(--accent-soft); border-left:3px solid var(--accent);
+    border-radius:0 6px 6px 0;
+  }
+  .note strong { color:var(--ink); }
+  .status { margin-top:1.25rem; color:var(--muted); font-size:.92rem; }
+  .status.error { color:var(--accent); }
+
+  footer {
+    margin-top:3rem; padding-top:1.25rem; border-top:1px solid var(--line);
+    font-family:var(--f-mono); font-size:.72rem; color:var(--muted);
+    display:flex; flex-wrap:wrap; gap:.4rem 1.25rem;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="brand">
+      <span class="glyph" aria-hidden="true">心</span>
+      <h1>Kokoro</h1>
+    </div>
+    <p class="tagline">
+      Search anime by <em>how it feels</em>, not by genre. Trained on 52,000 user
+      reviews, so it can place titles nobody has rated yet.
+    </p>
+  </header>
+
+  <form id="search-form">
+    <label for="q" class="sr-only" hidden>Mood query</label>
+    <input id="q" type="search" autocomplete="off"
+           placeholder="something melancholy but hopeful, that won't wreck me"
+           value="a funny lighthearted show to relax with">
+    <button type="submit" id="go">Search</button>
+  </form>
+
+  <div class="chips" id="chips"></div>
+
+  <div class="controls">
+    <label>
+      <input type="checkbox" id="popular" checked>
+      well-known titles only
+    </label>
+    <span class="meter" id="meter"></span>
+  </div>
+
+  <ol id="results" aria-live="polite"></ol>
+  <p class="status" id="status">Searching…</p>
+
+  <div class="note">
+    <strong>This is a research demo, and it is wrong sometimes.</strong>
+    The model learns mood from review prose with no popularity prior, which is
+    good for catalog coverage and hard on a demo — so “well-known titles only”
+    applies a serving-side audience floor. That filter is deliberately absent
+    from every reported metric. On the evaluation that matters, cold-start
+    retrieval over titles with zero interaction history, this scores
+    <strong>0.0845 NDCG@10</strong> where every collaborative baseline scores
+    exactly <strong>0.0000</strong>.
+    <a href="https://github.com/GgauravJ05/kokoro">Method, numbers and the
+    negative results →</a>
+  </div>
+
+  <footer>
+    <span>心 — <i>kokoro</i>, the heart as the seat of feeling</span>
+    <span>© 2026 Gaurav Jadhav</span>
+    <span>AGPL-3.0</span>
+    <span><a href="/docs">API</a></span>
+    <span><a href="/source">Source (AGPL §13)</a></span>
+  </footer>
+</div>
+
+<script>
+  const EXAMPLES = [
+    "a funny lighthearted show to relax with",
+    "dark psychological thriller that messes with your head",
+    "quiet slice of life about growing up",
+    "epic space opera with political intrigue",
+    "devastating drama that earns its ending",
+    "weird surreal comedy that makes no sense",
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const form = $("search-form"), input = $("q"), button = $("go");
+  const results = $("results"), status = $("status"), meter = $("meter");
+  const popular = $("popular");
+
+  EXAMPLES.forEach((text) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.textContent = text;
+    chip.addEventListener("click", () => { input.value = text; search(); });
+    $("chips").appendChild(chip);
+  });
+
+  const escape = (s) =>
+    String(s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  function render(data, wallMs) {
+    results.replaceChildren();
+    if (!data.results.length) {
+      status.textContent = "No titles matched. Try turning off the well-known filter.";
+      return;
+    }
+    data.results.forEach((hit, i) => {
+      const li = document.createElement("li");
+      li.className = "hit";
+
+      const facts = [hit.year, hit.episodes ? `${hit.episodes} ep` : null,
+                     hit.members ? `${hit.members.toLocaleString()} members` : null]
+                    .filter(Boolean).join(" · ");
+      const tags = (hit.evidence || []).slice(0, 5)
+        .map((t) => `<span class="tag">${escape(t)}</span>`).join("");
+
+      li.innerHTML =
+        `<span class="rank">${i + 1}</span>` +
+        `<h3>${escape(hit.romaji)}</h3>` +
+        `<span class="score">${hit.score.toFixed(3)}</span>` +
+        (facts ? `<div class="sub">${escape(facts)}</div>` : "") +
+        (tags ? `<div class="tags">${tags}</div>` : "");
+      results.appendChild(li);
+    });
+    status.textContent = "";
+    meter.innerHTML =
+      `<b>${data.latency_ms.toFixed(1)} ms</b> server · ` +
+      `<b>${wallMs.toFixed(0)} ms</b> round trip · ` +
+      `${data.catalog_size.toLocaleString()} titles`;
+  }
+
+  async function search() {
+    const q = input.value.trim();
+    if (q.length < 3) { status.textContent = "Type a few more characters."; return; }
+
+    button.disabled = true;
+    status.className = "status";
+    status.textContent = "Searching…";
+
+    const params = new URLSearchParams({ q, k: "10" });
+    if (popular.checked) params.set("min_members", "50000");
+
+    const started = performance.now();
+    try {
+      const response = await fetch(`/recommend?${params}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(
+          response.status === 503
+            ? "The model is not loaded on this server yet."
+            : body.detail || `Request failed (${response.status})`);
+      }
+      render(await response.json(), performance.now() - started);
+    } catch (err) {
+      status.className = "status error";
+      status.textContent = err.message;
+      meter.textContent = "";
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  form.addEventListener("submit", (e) => { e.preventDefault(); search(); });
+  search();
+</script>
+</body>
+</html>

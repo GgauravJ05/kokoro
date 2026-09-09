@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := help
 PY := .venv/bin/python
 
-.PHONY: help venv install fmt lint types test cov check headers clean serve
+.PHONY: help venv install fmt lint types test cov check headers clean serve demo docker
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -39,8 +39,18 @@ headers: ## Verify every source file carries its attribution header
 
 check: lint types headers test ## Everything CI runs
 
-serve: ## Run the API locally
-	$(PY) -m uvicorn kokoro.serve.app:app --reload --port 8000
+demo: ## Run the demo (API + web page) at http://localhost:8000
+	@echo "→ http://localhost:8000"
+	$(PY) -m uvicorn kokoro.serve.app:app --port 8000
+
+serve: demo ## Alias for `demo`
+
+docker: ## Build and run the demo in Docker
+	docker build -t kokoro .
+	docker run --rm -p 8000:8000 \
+		-v "$$PWD/data/processed:/app/data/processed:ro" \
+		-v "$$PWD/artifacts/two_tower:/app/artifacts/two_tower:ro" \
+		kokoro
 
 clean: ## Remove build and cache artifacts
 	rm -rf build dist *.egg-info .pytest_cache .ruff_cache .mypy_cache htmlcov .coverage

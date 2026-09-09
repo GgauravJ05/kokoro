@@ -1,0 +1,14 @@
+.git
+.venv
+data
+artifacts
+notebooks
+paper
+docs
+tests
+htmlcov
+**/__pycache__
+*.egg-info
+.mypy_cache
+.pytest_cache
+.ruff_cache

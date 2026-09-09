@@ -42,6 +42,7 @@ class Hit:
     tags: tuple[str, ...] = ()
     year: int | None = None
     episodes: int | None = None
+    members: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serialisable mapping."""
@@ -53,6 +54,7 @@ class Hit:
             "tags": list(self.tags),
             "year": self.year,
             "episodes": self.episodes,
+            "members": self.members,
         }
 
 
@@ -104,6 +106,12 @@ class Engine:
 
         self._encoder: Any | None = None  # loaded lazily; it is the heavy part
         self._meta = self._load_metadata(Path(corpus_dir))
+        #: Audience size per contiguous position, for the serving-time
+        #: popularity floor. See :meth:`search`.
+        self.members = np.array(
+            [self._meta.get(int(raw), {}).get("members", 0) for raw in self.item_ids],
+            dtype=np.int64,
+        )
         self.index_kind = index
         self.index = self._build_index(index, ef_search)
 
@@ -141,17 +149,19 @@ class Engine:
             return tuple(str(v) for v in value)
 
         out: dict[int, dict[str, Any]] = {}
-        for raw, title, genres, tags, aired, episodes in zip(
+        for raw, title, genres, tags, aired, episodes, members in zip(
             titles["anime_id"].tolist(),
             titles["title"].tolist(),
             titles["genres"].tolist(),
             titles["tags"].tolist(),
             titles["aired_start"].tolist(),
             titles["episodes"].tolist(),
+            titles["members"].tolist(),
             strict=True,
         ):
             out[int(raw)] = {
                 "title": str(title),
+                "members": _positive_int(members) or 0,
                 "genres": _strings(genres),
                 "tags": _strings(tags),
                 "year": _year(aired),
@@ -205,12 +215,22 @@ class Engine:
         vector: npt.NDArray[np.float32] = projected.cpu().numpy().astype(np.float32)
         return vector
 
-    def search(self, text: str, k: int = 10) -> list[Hit]:
+    def search(self, text: str, k: int = 10, *, min_members: int = 0) -> list[Hit]:
         """Retrieve the ``k`` titles closest to a free-text mood query.
 
         Args:
             text: The query.
             k: Number of results.
+            min_members: Drop titles with fewer than this many MyAnimeList
+                members. This is a **presentation** filter and is deliberately
+                absent from every evaluated path: the model carries no
+                popularity prior, which is good for catalog coverage (its
+                popularity lift is 1.7x against the collaborative baselines'
+                17-25x) and bad for a demo, where 40% of unfiltered results are
+                titles below 10k members that a visitor will not recognise.
+                Applying it during evaluation would inflate the metrics by
+                smuggling in exactly the popularity bias those metrics exist to
+                detect.
 
         Returns:
             Hits, best first.
@@ -222,10 +242,27 @@ class Engine:
             raise ValueError(f"k must be >= 1, got {k}")
 
         query = self.embed_query(text)
+        if min_members > 0:
+            # Over-fetch, then filter: asking the index for k and discarding
+            # would return fewer than k results.
+            eligible = np.flatnonzero(self.members >= min_members)
+            if eligible.size:
+                sims = (query @ self.vectors[eligible].T)[0]
+                take = min(k, eligible.size)
+                top = np.argpartition(-sims, kth=take - 1)[:take]
+                top = top[np.argsort(-sims[top])]
+                return self._to_hits(eligible[top], sims[top])
+
         ids, scores = self.index.search(query, k=min(k, self.vectors.shape[0]))
 
+        return self._to_hits(ids[0], scores[0])
+
+    def _to_hits(
+        self, positions: npt.NDArray[np.int64], scores: npt.NDArray[np.float32]
+    ) -> list[Hit]:
+        """Attach display metadata to ranked positions."""
         hits: list[Hit] = []
-        for pos, score in zip(ids[0].tolist(), scores[0].tolist(), strict=True):
+        for pos, score in zip(positions.tolist(), scores.tolist(), strict=True):
             raw = int(self.item_ids[pos])
             meta = self._meta.get(raw, {})
             hits.append(
@@ -238,6 +275,7 @@ class Engine:
                     tags=meta.get("tags", ()),
                     year=meta.get("year"),
                     episodes=meta.get("episodes"),
+                    members=int(meta.get("members", 0)),
                 )
             )
         return hits

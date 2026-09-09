@@ -186,7 +186,7 @@ kokoro corpus build           # 28,880 titles / 52.5k reviews / 6.3M ratings
 kokoro train --bottleneck --anchor-weight 20
 kokoro benchmark --corpus data/processed --split cold_start --cold-only \
     --content --trained artifacts/two_tower/item_embeddings_trained.npy
-make serve                    # http://localhost:8000/docs
+make demo                     # http://localhost:8000  — web UI + API
 ```
 
 ```bash
@@ -195,6 +195,24 @@ $ curl 'localhost:8000/recommend?q=a+funny+lighthearted+show+to+relax+with&k=3'
             {"romaji":"Nichijou","score":0.498}, ...],
  "latency_ms":3.2}
 ```
+
+`make docker` runs the same thing in a container. The image ships code, not
+data — the corpus is derived from third-party dumps this project does not
+redistribute, so `data/processed` and `artifacts/two_tower` are mounted in.
+
+### A note on the demo
+
+The model carries **no popularity prior**, which is good for catalog coverage
+and hard on a demo: unfiltered, 40% of results are titles below 10k members that
+a visitor will not recognise. The web UI therefore has a *"well-known titles
+only"* toggle that applies an audience floor **at serving time only**. It is
+absent from every reported metric — applying it during evaluation would inflate
+the numbers by smuggling back exactly the popularity bias the beyond-accuracy
+metrics exist to detect.
+
+It is also wrong sometimes. *"comfort watch for a bad day"* returns
+*Evangelion 3.0*, which is among the least comforting things ever animated. The
+page says so rather than hiding it.
 
 ## Reproducing the results
 
