@@ -14,8 +14,16 @@ from rich.table import Table
 from kokoro import __version__, provenance
 
 if TYPE_CHECKING:  # pragma: no cover
+    from collections.abc import Sequence
+    from pathlib import Path
+
+    import numpy as np
+    import numpy.typing as npt
+
     from kokoro.data.corpus import Corpus
+    from kokoro.eval.axes import AxisReport
     from kokoro.models.base import Retriever
+    from kokoro.train.contrastive import TrainResult
 
 app = typer.Typer(
     name="kokoro",
@@ -172,6 +180,61 @@ def benchmark(
     console.print(f"[green]report written to {save_results(results, results_out)}[/green]")
 
 
+def _print_axis_table(reports: Sequence[AxisReport]) -> None:
+    """Render the per-axis validation table."""
+    table = Table("axis", "AUC", "Cohen d", "n+", "n-", "verdict", title="mood axis validation")
+    for r in reports:
+        auc = "—" if r.auc != r.auc else f"{r.auc:.3f}"
+        d = "—" if r.cohens_d != r.cohens_d else f"{r.cohens_d:+.2f}"
+        colour = (
+            "green"
+            if r.conclusive and r.auc >= 0.70
+            else "yellow"
+            if r.conclusive and r.auc >= 0.60
+            else "red"
+            if r.conclusive and r.auc <= 0.40
+            else "dim"
+        )
+        table.add_row(
+            r.axis,
+            auc,
+            d,
+            str(r.n_positive),
+            str(r.n_negative),
+            f"[{colour}]{r.verdict}[/{colour}]",
+        )
+    console.print(table)
+
+
+def _validate_axes(
+    result: TrainResult,
+    item_emb: npt.NDArray[np.float32],
+    corpus: Corpus,
+    n_axes: int,
+    out_dir: Path,
+) -> list[dict[str, object]]:
+    """Compute, save and report the mood-axis validation."""
+    from dataclasses import asdict
+
+    import numpy as np
+
+    from kokoro.eval.axes import evaluate_axes, summarise
+    from kokoro.models.mood_axes import AXIS_NAMES
+
+    values = result.axis_values(item_emb)
+    np.save(out_dir / "axis_values.npy", values)
+
+    reports = evaluate_axes(values, list(AXIS_NAMES[:n_axes]), corpus.item_tag_map())
+    _print_axis_table(reports)
+
+    summary = summarise(reports)
+    console.print(
+        f"[bold]{summary['n_validated']}/{summary['n_conclusive']} conclusive axes "
+        f"validated[/bold]  mean AUC {summary['mean_auc']:.3f}"
+    )
+    return [asdict(r) for r in reports]
+
+
 def _add_content_models(
     models: list[Retriever],
     corpus: Corpus,
@@ -310,9 +373,20 @@ def train(
     batch_size: int = typer.Option(128, min=2, help="Distinct titles per batch."),
     output_dim: int = typer.Option(256, min=8, help="Shared retrieval space width."),
     temperature: float = typer.Option(0.05, help="InfoNCE temperature."),
+    bottleneck: bool = typer.Option(
+        False, "--bottleneck", help="Route the item tower through named mood axes."
+    ),
+    n_axes: int = typer.Option(8, min=2, help="Mood axes when --bottleneck is set."),
+    anchor_weight: float = typer.Option(
+        0.2, help="Anchor alignment weight; 0 disables (the ablation)."
+    ),
     seed: int = typer.Option(1337, help="RNG seed."),
 ) -> None:
-    """Train the two-tower projections on review text and evaluate cold start."""
+    """Train the two-tower projections on review text.
+
+    With ``--bottleneck`` the item tower passes through named mood axes and the
+    run also writes per-title axis values, which ``kokoro axes`` then validates.
+    """
     import json
     from dataclasses import asdict
     from pathlib import Path
@@ -322,8 +396,13 @@ def train(
     from kokoro import provenance
     from kokoro.data.corpus import load_corpus
     from kokoro.data.pairs import build_pairs
+    from kokoro.eval.axes import probe_tags
     from kokoro.models.content import encode_texts
-    from kokoro.train.contrastive import TrainConfig, train_projections
+    from kokoro.train.contrastive import (
+        TrainConfig,
+        build_anchor_batch,
+        train_projections,
+    )
 
     out_dir = Path(out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -348,7 +427,12 @@ def train(
         f"({val_pairs.n_titles} held-out titles)"
     )
 
-    item_texts = c.item_texts()
+    # Probe tags are withheld so the later axis validation is not circular:
+    # the model must infer "comfort" without ever reading the word "Tragedy".
+    held_out = probe_tags() if bottleneck else None
+    item_texts = c.item_texts(exclude_tags=held_out)
+    if held_out:
+        console.print(f"holding out {len(held_out)} probe tags from the item text")
     console.print(f"encoding {len(item_texts):,} item texts…")
     item_emb = encode_texts(item_texts, model_name=encoder, show_progress=True)
 
@@ -370,7 +454,17 @@ def train(
         batch_size=batch_size,
         temperature=temperature,
         seed=seed,
+        use_bottleneck=bottleneck,
+        n_axes=n_axes,
+        anchor_weight=anchor_weight,
     )
+
+    anchors = None
+    if bottleneck and anchor_weight > 0:
+        anchors = build_anchor_batch(
+            lambda phrases: encode_texts(phrases, model_name=encoder), n_axes, "cpu"
+        )
+        console.print(f"anchor batch: {anchors[0].shape[0]} pole phrases")
     console.print("\n[bold]training[/bold]")
     result = train_projections(
         train_pairs,
@@ -385,6 +479,8 @@ def train(
     np.save(out_dir / "item_embeddings_trained.npy", projected)
     np.save(out_dir / "item_embeddings_offshelf.npy", item_emb)
 
+    axis_report = _validate_axes(result, item_emb, c, n_axes, out_dir) if bottleneck else None
+
     report = provenance.stamp(
         {
             "corpus_version": c.version,
@@ -395,6 +491,7 @@ def train(
             "best_epoch": result.best_epoch,
             "train_loss": result.train_loss,
             "val_recall_at_1": result.val_recall,
+            "axes": axis_report,
         }
     )
     (out_dir / "training.json").write_text(json.dumps(report, indent=2, default=str) + "\n")

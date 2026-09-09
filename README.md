@@ -162,6 +162,61 @@ its oracle value on the split you are running. `popularity_lift` is meaningful
 on `user_holdout`, where the truth is popularity-skewed, and misleading on
 `cold_start`, where it is not.
 
+### Mood axes: what the interpretability claim actually survives
+
+The item tower can be routed through eight named bipolar axes
+(`kokoro train --bottleneck`). Whether those axes *mean* their names is an
+empirical question, so it gets an experiment rather than an assertion.
+
+**The probe.** Each axis is given AniList tags a human would place at opposite
+poles — `Iyashikei` and `Cute Girls Doing Cute Things` against `Tragedy`,
+`Suicide`, `Gore` for *comfort*. Agreement is ROC-AUC, which is rank-based and
+immune to the axis's arbitrary scale. **The 21 probe tags are withheld from the
+item text during training**, so the model must infer *comfort* without ever
+reading the word "Tragedy". Without that exclusion the test is circular and
+passes for free.
+
+**Anchor-weight ablation.** The anchor alignment loss pulls each axis's pole
+phrases toward that pole. Removing it is what shows whether the axis names are
+claims or decoration.
+
+| anchor weight | val recall@1 | axis spread (σ) | mean AUC | inverted axes |
+|---|---|---|---|---|
+| 0.0 (ablation) | 0.175 | 0.085 | 0.465 | **2** |
+| 1.0 | 0.183 | 0.186 | 0.537 | 0 |
+| 5.0 | 0.176 | 0.218 | 0.561 | 0 |
+| 20.0 | 0.179 | 0.238 | **0.565** | 0 |
+
+Per axis, at weight 20 against the ablation:
+
+| axis | AUC @ w=0 | AUC @ w=20 | verdict |
+|---|---|---|---|
+| `levity` | 0.471 | **0.686** | weak, responds strongly |
+| `comfort` | **0.372** (inverted) | **0.663** | weak, inversion corrected |
+| `hope` | **0.394** (inverted) | **0.630** | weak, inversion corrected |
+| `cognition` | 0.540 | 0.509 | no signal |
+| `intensity` | 0.493 | 0.471 | no signal |
+| `intimacy` | 0.517 | 0.433 | degraded |
+| `pace` | — | — | no tag proxy exists |
+| `catharsis` | — | — | no tag proxy exists |
+
+**What this supports, and what it does not.** The anchor mechanism works: it
+roughly triples axis spread, corrects two inverted axes, and costs essentially
+nothing in retrieval (recall@1 moves within noise). Three axes — `levity`,
+`comfort`, `hope` — reach AUC 0.63–0.69, meaningfully above chance.
+
+But **no axis clears the 0.70 bar this project set for "validated"**, and three
+show no signal at all. So the honest claim is *"three of eight axes are weakly
+but measurably aligned with their names"*, not "the model has interpretable mood
+axes". The README will say the stronger thing when the numbers do.
+
+One confound worth stating: a failing probe is not proof of a failing axis. The
+`intimacy` probe (`Found Family`/`Ensemble Cast` against `Cosmic Horror`/
+`Dystopian`) is really testing cast structure, not loneliness. `pace` and
+`catharsis` have no proxy anywhere in 348 AniList tags. Distinguishing "the axis
+is meaningless" from "the probe is bad" needs human judgements, which is the
+part of Week 6 that remains genuinely undone.
+
 ## Roadmap
 
 - [x] Evaluation harness, metrics, splits — *written first*
@@ -178,7 +233,8 @@ on `user_holdout`, where the truth is popularity-skewed, and misleading on
 - [x] Content tower + off-the-shelf cold-start baseline (first non-zero result)
 - [x] Two-tower contrastive training (frozen backbone, learned projections)
 - [ ] Hard-negative mining ablation; unfreeze the backbone
-- [ ] Mood-axis human validation (Spearman ρ per axis)
+- [x] Mood bottleneck + anchor alignment + tag-probe validation
+- [ ] **Human** mood judgements — the tag probes are a proxy, not a substitute
 - [ ] Trajectory encoder + shape-query evaluation
 - [ ] FastAPI service, HNSW index, quantised export, p95 latency budget
 - [ ] Writeup + workshop submission

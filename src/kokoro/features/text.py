@@ -169,6 +169,7 @@ def item_text(
     year: int | None = None,
     demographic: str | None = None,
     max_tags: int = 15,
+    exclude_tags: frozenset[str] | None = None,
 ) -> str:
     """Render a title's metadata as one natural-language string.
 
@@ -188,6 +189,9 @@ def item_text(
         year: Debut year.
         demographic: Target demographic.
         max_tags: Cap on tags, to keep the string inside the encoder's window.
+        exclude_tags: Tags to withhold. Used to hold out the axis-probe tags
+            during training, without which the axis validation would simply be
+            reading the answer off the input.
 
     Returns:
         A single string suitable for the item tower.
@@ -204,7 +208,10 @@ def item_text(
     if kind:
         parts.append(", ".join(kind))
 
-    tag_list = _as_list(tags)[:max_tags]
+    tag_list = _as_list(tags)
+    if exclude_tags:
+        tag_list = [t for t in tag_list if t not in exclude_tags]
+    tag_list = tag_list[:max_tags]
     if tag_list:
         parts.append("Themes and tags: " + ", ".join(tag_list))
 
@@ -213,6 +220,8 @@ def item_text(
         parts.append("Genres: " + ", ".join(genre_list))
 
     theme_list = [t for t in _as_list(themes) if t not in set(tag_list)]
+    if exclude_tags:
+        theme_list = [t for t in theme_list if t not in exclude_tags]
     if theme_list:
         parts.append("Also: " + ", ".join(theme_list))
 
@@ -243,11 +252,14 @@ def query_text(segment: str, *titles: str | None, max_chars: int = 512) -> str:
     return text[:max_chars].rsplit(" ", 1)[0]
 
 
-def build_item_texts(titles: Sequence[dict[str, Any]]) -> list[str]:
+def build_item_texts(
+    titles: Sequence[dict[str, Any]], *, exclude_tags: frozenset[str] | None = None
+) -> list[str]:
     """Render many titles at once.
 
     Args:
         titles: Row mappings carrying the fields :func:`item_text` accepts.
+        exclude_tags: Tags to withhold from every rendered string.
 
     Returns:
         One rendered string per input row, in order.
@@ -267,6 +279,7 @@ def build_item_texts(titles: Sequence[dict[str, Any]]) -> list[str]:
                 episodes=row.get("episodes"),
                 year=year,
                 demographic=row.get("demographic"),
+                exclude_tags=exclude_tags,
             )
         )
     return out

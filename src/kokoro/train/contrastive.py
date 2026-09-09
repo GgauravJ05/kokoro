@@ -29,13 +29,20 @@ from torch import Tensor, nn
 
 from kokoro.data.pairs import iter_batches
 from kokoro.losses.infonce import InfoNCELoss
+from kokoro.models.mood_axes import MOOD_AXES, MoodBottleneck, anchor_alignment_loss
 
 if TYPE_CHECKING:  # pragma: no cover
     import numpy.typing as npt
 
     from kokoro.data.pairs import PairSet
 
-__all__ = ["ProjectionTower", "TrainConfig", "TrainResult", "train_projections"]
+__all__ = [
+    "MoodItemTower",
+    "ProjectionTower",
+    "TrainConfig",
+    "TrainResult",
+    "train_projections",
+]
 
 
 @dataclass(slots=True)
@@ -55,6 +62,13 @@ class TrainConfig:
         seed: Seed for initialisation and batching.
         patience: Stop after this many epochs without validation improvement.
             ``0`` disables early stopping.
+        use_bottleneck: Route the item tower through the named mood axes. This
+            is the interpretability configuration; switching it off is the
+            ablation that says what interpretability cost.
+        n_axes: Bottleneck width when ``use_bottleneck`` is set.
+        anchor_weight: Weight of the anchor alignment loss. Without it the axes
+            are an arbitrary rotation and the axis *names* mean nothing, so the
+            ablation at ``0.0`` is what proves the naming is real.
     """
 
     output_dim: int = 256
@@ -67,6 +81,9 @@ class TrainConfig:
     dropout: float = 0.1
     seed: int = 1337
     patience: int = 5
+    use_bottleneck: bool = False
+    n_axes: int = 8
+    anchor_weight: float = 0.2
 
 
 class ProjectionTower(nn.Module):
@@ -91,6 +108,38 @@ class ProjectionTower(nn.Module):
         return nn.functional.normalize(out, dim=-1)
 
 
+class MoodItemTower(nn.Module):
+    """Item tower whose representation passes through named mood axes.
+
+    The encoder output is compressed to ``n_axes`` interpretable values and then
+    expanded back to the retrieval width. Retrieval still happens in the wide
+    space, so the ablation can separate "the bottleneck cost us accuracy" from
+    "the bottleneck bought us an explanation".
+
+    Args:
+        input_dim: Width of the frozen encoder output.
+        output_dim: Width of the shared retrieval space.
+        n_axes: Number of mood axes.
+        dropout: Dropout applied to the input.
+    """
+
+    def __init__(
+        self, input_dim: int, output_dim: int, n_axes: int = 8, dropout: float = 0.1
+    ) -> None:
+        super().__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.bottleneck = MoodBottleneck(input_dim, n_axes=n_axes, output_dim=output_dim)
+
+    def axes(self, x: Tensor) -> Tensor:
+        """Return the mood-axis values for ``x``, shape ``(B, n_axes)``."""
+        return self.bottleneck.axes(self.dropout(x))
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Project through the bottleneck and L2-normalise."""
+        reconstructed, _ = self.bottleneck(self.dropout(x))
+        return nn.functional.normalize(reconstructed, dim=-1)
+
+
 @dataclass(slots=True)
 class TrainResult:
     """Outcome of a training run.
@@ -108,12 +157,28 @@ class TrainResult:
     """
 
     query_tower: ProjectionTower
-    item_tower: ProjectionTower
+    item_tower: nn.Module
     train_loss: list[float] = field(default_factory=list)
     val_loss: list[float] = field(default_factory=list)
     val_recall: list[float] = field(default_factory=list)
     best_epoch: int = 0
     config: TrainConfig = field(default_factory=TrainConfig)
+
+    @torch.no_grad()
+    def axis_values(self, item_embeddings: npt.NDArray[np.float32]) -> npt.NDArray[np.float64]:
+        """Return per-item mood axis values, shape ``(n_items, n_axes)``.
+
+        Raises:
+            TypeError: If this run did not use a mood bottleneck.
+        """
+        if not isinstance(self.item_tower, MoodItemTower):
+            raise TypeError("this run was trained without a mood bottleneck")
+        self.item_tower.eval()
+        tensor = torch.as_tensor(item_embeddings, dtype=torch.float32)
+        values: npt.NDArray[np.float64] = (
+            self.item_tower.axes(tensor).cpu().numpy().astype(np.float64)
+        )
+        return values
 
     @torch.no_grad()
     def project_items(self, item_embeddings: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
@@ -140,7 +205,7 @@ class TrainResult:
 @torch.no_grad()
 def _validation_recall(
     query_tower: ProjectionTower,
-    item_tower: ProjectionTower,
+    item_tower: nn.Module,
     queries: Tensor,
     items: Tensor,
     targets: Tensor,
@@ -198,9 +263,44 @@ def _validate_inputs(
         raise ValueError("val_pairs given without val_query_embeddings")
 
 
+def build_anchor_batch(encode: object, n_axes: int, device: str) -> tuple[Tensor, Tensor, Tensor]:
+    """Encode the axis pole phrases into an anchor batch.
+
+    Each axis contributes two anchors, one per pole. The alignment loss then
+    requires the negative-pole phrase to land low on that axis and the
+    positive-pole phrase to land high, which is what ties an axis to its name.
+
+    Args:
+        encode: Callable mapping ``list[str]`` to an embedding array.
+        n_axes: Number of axes in use; anchors beyond it are ignored.
+        device: Torch device.
+
+    Returns:
+        ``(embeddings, axis_index, pole)`` where ``pole`` is -1.0 or +1.0.
+    """
+    phrases: list[str] = []
+    axis_idx: list[int] = []
+    poles: list[float] = []
+
+    for i, (_name, negative, positive) in enumerate(MOOD_AXES[:n_axes]):
+        phrases.append(negative)
+        axis_idx.append(i)
+        poles.append(-1.0)
+        phrases.append(positive)
+        axis_idx.append(i)
+        poles.append(1.0)
+
+    vectors = encode(phrases)  # type: ignore[operator]
+    return (
+        torch.as_tensor(np.asarray(vectors), dtype=torch.float32, device=device),
+        torch.as_tensor(axis_idx, dtype=torch.long, device=device),
+        torch.as_tensor(poles, dtype=torch.float32, device=device),
+    )
+
+
 def _run_epoch(
     query_tower: ProjectionTower,
-    item_tower: ProjectionTower,
+    item_tower: nn.Module,
     criterion: nn.Module,
     optimiser: torch.optim.Optimizer,
     train_pairs: PairSet,
@@ -210,8 +310,9 @@ def _run_epoch(
     cfg: TrainConfig,
     epoch: int,
     device: str,
+    anchors: tuple[Tensor, Tensor, Tensor] | None = None,
 ) -> float:
-    """Run one training epoch and return its mean InfoNCE loss."""
+    """Run one training epoch and return its mean loss."""
     query_tower.train()
     item_tower.train()
     losses: list[float] = []
@@ -222,6 +323,14 @@ def _run_epoch(
         it = item_tower(i_all[pos_all[idx]])
 
         loss = criterion(q, it)
+
+        # The anchor term is what makes axis names claims rather than labels.
+        if anchors is not None and isinstance(item_tower, MoodItemTower):
+            anchor_emb, anchor_axis, anchor_pole = anchors
+            loss = loss + cfg.anchor_weight * anchor_alignment_loss(
+                item_tower.axes(anchor_emb), anchor_axis, anchor_pole
+            )
+
         optimiser.zero_grad(set_to_none=True)
         loss.backward()
         optimiser.step()
@@ -238,6 +347,7 @@ def train_projections(
     val_pairs: PairSet | None = None,
     val_query_embeddings: npt.NDArray[np.float32] | None = None,
     config: TrainConfig | None = None,
+    anchors: tuple[Tensor, Tensor, Tensor] | None = None,
     device: str = "cpu",
     verbose: bool = True,
 ) -> TrainResult:
@@ -252,6 +362,9 @@ def train_projections(
         val_pairs: Optional held-out pairs, split by title.
         val_query_embeddings: Frozen embeddings of ``val_pairs.queries``.
         config: Hyperparameters; defaults to :class:`TrainConfig`.
+        anchors: Output of :func:`build_anchor_batch`. Required for the anchor
+            alignment term; without it a bottleneck is still a bottleneck but
+            its axis names are unjustified.
         device: Torch device.
         verbose: Print per-epoch progress.
 
@@ -273,7 +386,11 @@ def train_projections(
     q_dim = int(query_embeddings.shape[1])
     i_dim = int(item_embeddings.shape[1])
     query_tower = ProjectionTower(q_dim, cfg.output_dim, cfg.dropout).to(device)
-    item_tower = ProjectionTower(i_dim, cfg.output_dim, cfg.dropout).to(device)
+    item_tower: nn.Module = (
+        MoodItemTower(i_dim, cfg.output_dim, cfg.n_axes, cfg.dropout).to(device)
+        if cfg.use_bottleneck
+        else ProjectionTower(i_dim, cfg.output_dim, cfg.dropout).to(device)
+    )
 
     criterion = InfoNCELoss(temperature=cfg.temperature, symmetric=cfg.symmetric).to(device)
     optimiser = torch.optim.AdamW(
@@ -316,6 +433,7 @@ def train_projections(
             cfg,
             epoch,
             device,
+            anchors=anchors,
         )
         result.train_loss.append(mean_loss)
 

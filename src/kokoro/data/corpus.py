@@ -52,11 +52,16 @@ class Corpus:
         """Corpus content hash."""
         return str(self.manifest["corpus_version"])
 
-    def item_texts(self) -> list[str]:
+    def item_texts(self, *, exclude_tags: frozenset[str] | None = None) -> list[str]:
         """Render every catalog item as the string the item tower encodes.
 
         Ordered by contiguous item position, so the result lines up with the
         embedding matrix a content model is built from.
+
+        Args:
+            exclude_tags: Tags to withhold. Pass
+                :func:`kokoro.eval.axes.probe_tags` when training a model whose
+                mood axes will later be validated against those tags.
         """
         from kokoro.features.text import build_item_texts
 
@@ -68,7 +73,7 @@ class Corpus:
                 rows.append(row)
             else:
                 rows.append({"title": f"unknown title {raw}"})
-        return build_item_texts(rows)
+        return build_item_texts(rows, exclude_tags=exclude_tags)
 
     def title_variants(self) -> dict[int, tuple[str, ...]]:
         """Return every known title string per raw ``anime_id``, for masking."""
@@ -83,6 +88,21 @@ class Corpus:
         rest = frame[cols].to_numpy(dtype=object)
         for anime_id, values in zip(ids, rest, strict=True):
             out[int(anime_id)] = tuple(str(v) for v in values if isinstance(v, str) and v.strip())
+        return out
+
+    def item_tag_map(self) -> dict[int, list[str]]:
+        """Return contiguous item position to its tag list, for axis probing."""
+        lookup = dict(
+            zip(
+                self.titles["anime_id"].tolist(),
+                self.titles["tags"].tolist(),
+                strict=True,
+            )
+        )
+        out: dict[int, list[str]] = {}
+        for raw, pos in self.item_index.items():
+            tags = lookup.get(raw)
+            out[pos] = [str(t) for t in tags] if tags is not None else []
         return out
 
     def item_titles(self) -> npt.NDArray[np.str_]:
