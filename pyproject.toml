@@ -65,6 +65,8 @@ dev = [
   "mypy>=1.18",
   "pre-commit>=3.7",
   "types-PyYAML",
+  "pandas-stubs",
+  "scipy-stubs",
   "respx>=0.21",
 ]
 all = ["kokoro-retrieval[train,index,serve,track,dev]"]

@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+from scipy import sparse
 
 from kokoro.eval.splits import Interactions
 
@@ -117,29 +118,43 @@ class ItemKNNRecommender:
     Similarity between items is cosine over their user-interaction columns,
     shrunk toward zero by co-occurrence count:
 
-    .. math:: s'_{ij} = s_{ij} \\cdot \\frac{c_{ij}}{c_{ij} + \\lambda}
+    .. math:: s'_{ij} = s_{ij} \cdot \frac{c_{ij}}{c_{ij} + \lambda}
 
     Without the shrinkage two items sharing a single user score a perfect 1.0,
     and the long tail of an anime catalog is full of such pairs — they would
     otherwise dominate every neighbourhood.
 
+    Everything is held sparse. On the real corpus (69,599 users x 9,864 titles)
+    a dense user-item matrix is 5.5 GB and the item-item matrix another 0.8 GB;
+    the similarity is therefore accumulated in row blocks and truncated to
+    ``k_neighbors`` before anything dense is materialised.
+
     Args:
         k_neighbors: Neighbours retained per item; the rest are zeroed.
-        shrinkage: :math:`\\lambda` above. Larger means more distrust of
+        shrinkage: :math:`\lambda` above. Larger means more distrust of
             low-support pairs.
+        block: Items per similarity block. Trades peak memory against speed;
+            the default keeps each block under ~50 MB at this catalog size.
         name: Override the reporting label.
     """
 
     def __init__(
-        self, k_neighbors: int = 50, shrinkage: float = 20.0, name: str = "item-knn"
+        self,
+        k_neighbors: int = 50,
+        shrinkage: float = 20.0,
+        block: int = 512,
+        name: str = "item-knn",
     ) -> None:
         if k_neighbors < 1:
             raise ValueError(f"k_neighbors must be >= 1, got {k_neighbors}")
+        if block < 1:
+            raise ValueError(f"block must be >= 1, got {block}")
         self.k_neighbors = k_neighbors
         self.shrinkage = shrinkage
+        self.block = block
         self.name = name
-        self.similarity: npt.NDArray[np.float64] | None = None
-        self._matrix: npt.NDArray[np.float64] | None = None
+        self.similarity: sparse.csr_matrix | None = None
+        self._matrix: sparse.csr_matrix | None = None
         self._n_items = 0
 
     def fit(self, data: Interactions) -> ItemKNNRecommender:
@@ -154,31 +169,42 @@ class ItemKNNRecommender:
         n_users, n_items = data.n_users, data.n_items
         self._n_items = n_items
 
-        mat = np.zeros((n_users, n_items), dtype=np.float64)
-        mat[data.user, data.item] = 1.0
+        mat = sparse.csr_matrix(
+            (np.ones(len(data), dtype=np.float64), (data.user, data.item)),
+            shape=(n_users, n_items),
+        )
+        mat.data[:] = 1.0  # collapse duplicate interactions to a single implicit 1
         self._matrix = mat
 
-        norms = np.maximum(np.linalg.norm(mat, axis=0), 1e-12)
-        cooccur = mat.T @ mat
-        sim = cooccur / np.outer(norms, norms)
-        # np.where alone would still evaluate 0/0 for never-co-occurring pairs;
-        # divide(where=...) leaves those entries at the `out` value instead.
-        shrink = np.divide(
-            cooccur,
-            cooccur + self.shrinkage,
-            out=np.zeros_like(cooccur),
-            where=cooccur > 0,
-        )
-        sim *= shrink
-        np.fill_diagonal(sim, 0.0)
+        norms = np.asarray(np.sqrt(mat.multiply(mat).sum(axis=0))).ravel()
+        norms = np.maximum(norms, 1e-12)
 
-        if self.k_neighbors < n_items:
-            cut = np.partition(sim, kth=n_items - self.k_neighbors, axis=1)[
-                :, n_items - self.k_neighbors
-            ]
-            sim[sim < cut[:, None]] = 0.0
+        csc = mat.tocsc()
+        rows: list[sparse.csr_matrix] = []
 
-        self.similarity = sim
+        for start in range(0, n_items, self.block):
+            stop = min(start + self.block, n_items)
+            # (block, n_items) dense: the only dense allocation, bounded by `block`.
+            cooccur = (csc[:, start:stop].T @ mat).toarray()
+
+            sim = cooccur / np.outer(norms[start:stop], norms)
+            shrink = np.divide(
+                cooccur,
+                cooccur + self.shrinkage,
+                out=np.zeros_like(cooccur),
+                where=cooccur > 0,
+            )
+            sim *= shrink
+            sim[np.arange(stop - start), np.arange(start, stop)] = 0.0
+
+            if self.k_neighbors < n_items:
+                kth = n_items - self.k_neighbors
+                cut = np.partition(sim, kth=kth, axis=1)[:, kth]
+                sim[sim < cut[:, None]] = 0.0
+
+            rows.append(sparse.csr_matrix(sim))
+
+        self.similarity = sparse.vstack(rows, format="csr")
         return self
 
     def recommend(
@@ -192,7 +218,7 @@ class ItemKNNRecommender:
         if self.similarity is None or self._matrix is None:
             raise RuntimeError("call fit() before recommending")
         profiles = self._matrix[users]
-        scores = profiles @ self.similarity
+        scores = np.asarray((profiles @ self.similarity).todense())
         if exclude_seen:
-            scores[profiles > 0] = -np.inf
+            scores[np.asarray(profiles.todense()) > 0] = -np.inf
         return _top_k(scores, k)

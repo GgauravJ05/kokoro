@@ -68,12 +68,40 @@ is the novel contribution, and it unlocks queries nothing else answers:
 
 ## Status
 
-Early. The evaluation harness, the splits, the baselines and the from-scratch
-matrix factoriser are implemented and tested. The neural towers are implemented
-but untrained — **no accuracy numbers are claimed yet, and this README will not
-carry a results table until they come out of `kokoro benchmark` on real data.**
-See [the roadmap](#roadmap), or open [`docs/plan.html`](docs/plan.html) in a
-browser for the full nine-week plan with the trajectory figure.
+The corpus is built and the baselines have real numbers. The neural towers are
+implemented but **untrained** — nothing below is a Kokoro result yet, only the
+bar Kokoro has to clear. See [the roadmap](#roadmap), or open
+[`docs/plan.html`](docs/plan.html) in a browser for the nine-week plan.
+
+### Baselines on the real corpus
+
+`kokoro benchmark --corpus data/processed`, corpus `7bb25749c812bdd1`,
+296,333 interactions over a 3,000-user subsample, 6,456 items, `user_holdout`
+split, k=10.
+
+| model | recall@10 | ndcg@10 | mrr@10 | coverage@10 | gini@10 | pop. lift | query ms |
+|---|---|---|---|---|---|---|---|
+| random | 0.0010 | 0.0026 | 0.0078 | **0.991** | **0.257** | **0.99** | 0.003 |
+| popularity | 0.1047 | 0.1530 | 0.3051 | 0.007 | 0.998 | 23.2× | 0.060 |
+| item-kNN | 0.1630 | 0.2434 | 0.4379 | 0.057 | 0.993 | 18.8× | 0.039 |
+| **BPR-MF** (from scratch) | **0.1762** | **0.2633** | **0.4493** | 0.167 | 0.968 | 13.6× | 0.065 |
+
+Three things this table is actually saying:
+
+1. **The from-scratch NumPy model wins.** BPR-MF beats item-kNN on every
+   accuracy metric *and* surfaces 3× more of the catalog at lower popularity
+   bias. It needed 30 epochs — at 5 it scores 0.169 NDCG, barely above
+   popularity, which is worth knowing before anyone quotes an undertrained
+   number.
+2. **Popularity bias is the real problem here, and it is severe.** Popularity
+   alone gets 0.153 NDCG while showing 0.7% of the catalog with a 23×
+   popularity lift. Any model that reports accuracy without `coverage` and
+   `gini` next to it is hiding this.
+3. **Random confirms the harness is honest.** Near-total coverage, no accuracy.
+   If anything ever scores below this line, the bug is in the evaluation code.
+
+Beating 0.2633 NDCG *while* moving coverage up is the target. Accuracy alone is
+not a result.
 
 ## Quickstart
 
@@ -167,7 +195,12 @@ good.
 - [x] Baselines: random, popularity, item-kNN
 - [x] From-scratch BPR matrix factorisation (hand-derived gradients, NumPy only)
 - [x] Provenance and embedding-watermark layer
-- [ ] AniList + Jikan ingestion at corpus scale; frozen versioned dataset
+- [x] Frozen, versioned corpus with recorded join rates and biases
+      (`kokoro corpus build`) — 28,880 titles, 52.7k reviews, 6.3M ratings
+- [x] Baselines on real data; sparse item-kNN; `user_holdout` split
+- [ ] AniList + Jikan ingestion **blocked upstream** — AniList returns
+      `403 temporarily disabled`, Jikan `504`. Ingestion is source-agnostic and
+      currently runs off static Hugging Face dumps instead
 - [ ] Arc alignment: hand-annotated set, then extractor evaluation
 - [ ] Two-tower training + negative-mining ablation
 - [ ] Mood-axis human validation (Spearman ρ per axis)
@@ -180,6 +213,20 @@ good.
 No third-party dataset is redistributed here. `data/` holds pointers and
 reproducible ingestion scripts only. Titles, synopses, cover art and reviews
 remain the property of their owners and are used for non-commercial research.
+
+Run `kokoro corpus sources` to print every source with its licence and its
+**known biases**. Those biases are copied into `manifest.json` beside the data,
+because they bound what the model can honestly claim:
+
+- Reviews cover **490 of 28,880 titles** (1.7%). The model is supervised on the
+  head and must reach the rest through the content tower — which makes
+  cold-start the headline evaluation, not a footnote.
+- **91.3% of reviews are positive**, and `mixed` verdicts were dropped by the
+  upstream author. That is exactly the ambivalent middle a mood model needs.
+- The rating matrix carries **no timestamps at all**, so the `temporal` split —
+  the one this project calls its headline — is *not computable* on it. Results
+  use `user_holdout` and say so. Restoring a temporal split needs a timestamped
+  source.
 
 Rate limits are enforced in code, not by convention — `KOKORO_ANILIST_RPS` is
 capped in [`config.py`](src/kokoro/config.py) and `429` responses are honoured

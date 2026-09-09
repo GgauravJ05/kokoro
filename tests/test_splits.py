@@ -98,3 +98,49 @@ def test_positives_by_user_thresholds(interactions: Interactions) -> None:
         assert items
     strict = interactions.positives_by_user(min_rating=10.0)
     assert sum(map(len, strict.values())) <= sum(map(len, positives.values()))
+
+
+def test_user_holdout_gives_every_eligible_user_test_items() -> None:
+    from kokoro.eval.splits import user_holdout_split
+
+    data = Interactions(
+        user=np.repeat(np.arange(10, dtype=np.int64), 10),
+        item=np.tile(np.arange(10, dtype=np.int64), 10),
+        rating=np.full(100, 9.0, np.float32),
+        timestamp=np.zeros(100, np.int64),
+    )
+    split = user_holdout_split(data, holdout_frac=0.2, min_interactions=5)
+
+    test_users = set(split.test.user.tolist())
+    assert test_users == set(range(10)), "every eligible user must be evaluable"
+    assert split.meta["n_eval_users"] == 10
+    for u in range(10):
+        assert (split.train.user == u).sum() > 0, "no user may lose all training data"
+
+
+def test_user_holdout_skips_users_below_the_minimum() -> None:
+    from kokoro.eval.splits import user_holdout_split
+
+    data = Interactions(
+        user=np.array([0, 0, 0, 0, 0, 0, 1, 1], np.int64),
+        item=np.arange(8, dtype=np.int64),
+        rating=np.full(8, 9.0, np.float32),
+        timestamp=np.zeros(8, np.int64),
+    )
+    split = user_holdout_split(data, min_interactions=5)
+    assert set(split.test.user.tolist()) == {0}, "user 1 has too few interactions to evaluate"
+
+
+def test_user_holdout_works_without_timestamps(interactions: Interactions) -> None:
+    """The reason this strategy exists: the rating source has no timestamps."""
+    from kokoro.eval.splits import user_holdout_split
+
+    undated = Interactions(
+        user=interactions.user,
+        item=interactions.item,
+        rating=interactions.rating,
+        timestamp=np.zeros(len(interactions), np.int64),
+    )
+    split = user_holdout_split(undated)
+    assert len(split.test) > 0
+    assert len(split.train) + len(split.test) == len(undated)

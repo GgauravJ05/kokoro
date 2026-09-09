@@ -20,6 +20,14 @@ Three strategies, used for different claims:
     that answers the deployed question: *given everything known today, can we
     predict what people watch tomorrow?*
 
+:func:`user_holdout_split`
+    Holds out a random sample of each user's interactions. The honest fallback
+    when the source has **no timestamps at all** — which is the case for the
+    rating matrix this project ingests. Weaker than a temporal split because it
+    still lets the model see a user's later behaviour, but unlike
+    :func:`random_split` it guarantees every evaluated user has held-out items,
+    so per-user metrics are computed over the population you claim to serve.
+
 :func:`cold_start_split`
     Holds out entire items released after the cut, so no interaction for them
     exists at training time. Measures whether the content tower alone can place
@@ -43,6 +51,7 @@ __all__ = [
     "leave_one_out_split",
     "random_split",
     "temporal_split",
+    "user_holdout_split",
 ]
 
 
@@ -255,4 +264,70 @@ def cold_start_split(data: Interactions, item_debut: npt.NDArray[np.int64], *, c
         test=data.take(np.flatnonzero(is_cold)),
         strategy="cold_start",
         meta={"cut": int(cut), "n_cold_items": int(cold.sum())},
+    )
+
+
+def user_holdout_split(
+    data: Interactions,
+    *,
+    holdout_frac: float = 0.2,
+    min_interactions: int = 5,
+    seed: int = 1337,
+) -> Split:
+    """Hold out a random fraction of each user's interactions.
+
+    Use this when the source carries no timestamps, so neither
+    :func:`temporal_split` nor :func:`leave_one_out_split` can be computed
+    honestly. Report it as such: it is not a substitute for a temporal split,
+    because a model can still learn from a user's later behaviour.
+
+    Users with fewer than ``min_interactions`` are kept wholly in train — a user
+    with two ratings cannot support both a profile and an evaluation.
+
+    Args:
+        data: The interaction log.
+        holdout_frac: Fraction of each eligible user's interactions to hold out.
+        min_interactions: Minimum interactions for a user to be evaluated.
+        seed: RNG seed.
+
+    Returns:
+        The resulting :class:`Split`, with ``meta["n_eval_users"]`` recording how
+        many users are actually scored.
+
+    Raises:
+        ValueError: If ``holdout_frac`` is not strictly between 0 and 1.
+    """
+    if not 0.0 < holdout_frac < 1.0:
+        raise ValueError(f"holdout_frac must be in (0, 1), got {holdout_frac}")
+
+    rng = np.random.default_rng(seed)
+    order = np.argsort(data.user, kind="stable")
+    users_sorted = data.user[order]
+    _, starts, counts = np.unique(users_sorted, return_index=True, return_counts=True)
+
+    test_pos: list[int] = []
+    n_eval_users = 0
+    for start, count in zip(starts.tolist(), counts.tolist(), strict=True):
+        if count < min_interactions:
+            continue
+        n_hold = max(1, round(count * holdout_frac))
+        if n_hold >= count:  # always leave the user something to train on
+            n_hold = count - 1
+        picked = rng.choice(count, size=n_hold, replace=False) + start
+        test_pos.extend(picked.tolist())
+        n_eval_users += 1
+
+    test_idx = order[np.asarray(test_pos, dtype=np.int64)] if test_pos else np.empty(0, np.int64)
+    mask = np.ones(len(data), dtype=bool)
+    mask[test_idx] = False
+    return Split(
+        train=data.take(np.flatnonzero(mask)),
+        test=data.take(test_idx),
+        strategy="user_holdout",
+        meta={
+            "holdout_frac": holdout_frac,
+            "min_interactions": min_interactions,
+            "seed": seed,
+            "n_eval_users": n_eval_users,
+        },
     )
