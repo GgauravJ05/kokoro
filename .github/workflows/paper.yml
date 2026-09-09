@@ -16,7 +16,7 @@ jobs:
     name: build PDF
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: compile LaTeX
         uses: xu-cheng/latex-action@v3
         with:
@@ -24,7 +24,7 @@ jobs:
           working_directory: paper
           latexmk_use_xelatex: false
       - name: upload PDF
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kokoro-paper
           path: paper/kokoro.pdf
