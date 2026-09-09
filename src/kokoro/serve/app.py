@@ -14,15 +14,18 @@ satisfy that; do not remove it.
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import FastAPI, Query, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
 from kokoro import __version__, provenance
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Awaitable, Callable
+
+    from kokoro.serve.engine import Engine
 
 __all__ = ["Recommendation", "app"]
 
@@ -60,6 +63,7 @@ class RecommendResponse(BaseModel):
     results: list[Recommendation]
     latency_ms: float
     model_version: str
+    catalog_size: int
 
 
 app = FastAPI(
@@ -86,10 +90,56 @@ async def attach_provenance(
     return response
 
 
+#: Loaded once on first use rather than at import, so the module stays importable
+#: (and testable) on a machine with no trained artifacts.
+_engine: Engine | None = None
+
+
+def get_engine() -> Engine:
+    """Return the process-wide retrieval engine.
+
+    Raises:
+        HTTPException: 503 when no trained artifacts are present, which is an
+            operational state rather than a bug — the service is up, the model
+            is not loaded.
+    """
+    global _engine  # noqa: PLW0603
+    if _engine is None:
+        import os
+
+        from kokoro.serve.engine import Engine as _Engine
+
+        try:
+            _engine = _Engine(
+                os.environ.get("KOKORO_ARTIFACT_DIR", "artifacts/two_tower"),
+                os.environ.get("KOKORO_CORPUS_DIR", "data/processed"),
+                index=os.environ.get("KOKORO_INDEX", "hnsw"),
+                ef_search=int(os.environ.get("KOKORO_EF_SEARCH", "64")),
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return _engine
+
+
 @app.get("/health")
-async def health() -> dict[str, str]:
-    """Liveness probe."""
-    return {"status": "ok", "version": __version__}
+async def health() -> dict[str, object]:
+    """Liveness probe. Reports whether a model is loaded, without loading one."""
+    return {"status": "ok", "version": __version__, "model_loaded": _engine is not None}
+
+
+@app.get("/ready")
+async def ready() -> dict[str, object]:
+    """Readiness probe: a 200 means the next query will be fast.
+
+    The encoder loads lazily on first use, so simply constructing the engine is
+    not enough — an earlier version returned 200 here while the first real query
+    still paid a 7-second model load. A readiness probe that lies is worse than
+    none, because a load balancer will route traffic to it. This warms the
+    encoder so the promise holds.
+    """
+    engine = get_engine()
+    engine.embed_query("readiness warmup")
+    return {"status": "ready", **engine.stats()}
 
 
 @app.get("/source")
@@ -115,9 +165,29 @@ async def recommend(
 ) -> Any:
     """Retrieve titles matching a free-text mood query.
 
-    Raises:
-        NotImplementedError: Until a trained checkpoint is wired in. The route
-            is defined now so the response contract — explanation axes and
-            trajectory warnings included — is fixed before the model exists.
+    Returns:
+        The ranked results with their served latency, so a caller can measure
+        the service rather than trust a README.
     """
-    raise NotImplementedError("load a trained checkpoint into the app state; see docs/serving.md")
+    del media_type  # the current corpus is anime-only; the parameter is reserved
+    engine = get_engine()
+
+    start = time.perf_counter()
+    hits = engine.search(q, k=k)
+    elapsed = (time.perf_counter() - start) * 1000
+
+    return RecommendResponse(
+        query=q,
+        results=[
+            Recommendation(
+                title_id=h.anime_id,
+                romaji=h.title,
+                score=h.score,
+                evidence=list(h.tags[:5]),
+            )
+            for h in hits
+        ],
+        latency_ms=round(elapsed, 3),
+        model_version=__version__,
+        catalog_size=int(engine.vectors.shape[0]),
+    )

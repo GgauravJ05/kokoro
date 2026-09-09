@@ -277,6 +277,41 @@ threads rather than whole-work reviews, and a hand-built shape-query set. That
 is a different data-collection problem, and it is the honest next step rather
 than tuning this one until it looks positive.
 
+### Serving
+
+`kokoro train` writes a serving bundle (item vectors, query tower, id map) and
+`kokoro.serve.app` answers free-text queries over it. Measured on a laptop CPU,
+9,864 titles, 256-dim vectors:
+
+| stage | p50 | p95 |
+|---|---|---|
+| query encoding (MiniLM) | 2.78 ms | 3.04 ms |
+| HNSW lookup (`ef_search=64`) | 0.06 ms | 0.08 ms |
+| **end-to-end through HTTP** | **3.20 ms** | **4.44 ms** |
+
+ANN recall against exact search, which is what says whether the index is
+returning the right neighbours rather than just returning fast:
+
+| `ef_search` | recall@10 | search p95 |
+|---|---|---|
+| 16 | 0.930 | 0.035 ms |
+| 32 | 0.960 | 0.047 ms |
+| **64** | **1.000** | **0.075 ms** |
+| 256 | 1.000 | 0.214 ms |
+
+Two honest notes on these numbers. **The index is not the bottleneck and barely
+earns its place**: exact brute force runs in 0.102 ms at this catalog size, so
+HNSW saves ~0.04 ms while the encoder costs 3 ms. It is kept because the
+recall/latency curve is a real result and because the gap widens with catalog
+size — not because it is load-bearing today. And the whole budget is dominated
+by one small encoder forward pass, which is exactly the argument for this
+architecture over an LLM call per request.
+
+The readiness probe warms the encoder. An earlier version returned 200 while
+the first real query still paid a **7.3-second** model load — a probe that lies
+is worse than none, because a load balancer routes traffic to it. There is a
+regression test.
+
 ## Roadmap
 
 - [x] Evaluation harness, metrics, splits — *written first*
@@ -297,7 +332,7 @@ than tuning this one until it looks positive.
 - [ ] **Human** mood judgements — the tag probes are a proxy, not a substitute
 - [x] Trajectory construction + permutation control + shape-vs-mean test
       (**negative result** — see above; the encoder is not justified by this data)
-- [ ] FastAPI service, HNSW index, quantised export, p95 latency budget
+- [x] FastAPI service, HNSW index, recall/latency sweep (p95 4.4 ms end-to-end)
 - [ ] Writeup + workshop submission
 
 ## Data & ethics

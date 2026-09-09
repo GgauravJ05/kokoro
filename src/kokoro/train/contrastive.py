@@ -246,6 +246,8 @@ def _validate_inputs(
     item_embeddings: npt.NDArray[np.float32],
     val_pairs: PairSet | None,
     val_query_embeddings: npt.NDArray[np.float32] | None,
+    cfg: TrainConfig,
+    anchors: tuple[Tensor, Tensor, Tensor] | None,
 ) -> None:
     """Reject misaligned inputs before a long run starts.
 
@@ -261,6 +263,15 @@ def _validate_inputs(
         raise ValueError("train_pairs reference an item position outside item_embeddings")
     if val_pairs is not None and val_query_embeddings is None:
         raise ValueError("val_pairs given without val_query_embeddings")
+    # A config that asks for anchor alignment while no anchors are supplied is a
+    # contradiction. Training would silently proceed *without* the term and
+    # report a different model than the one requested — which is exactly how a
+    # dropped argument produced an entire ablation table of identical runs.
+    if cfg.use_bottleneck and cfg.anchor_weight > 0 and anchors is None:
+        raise ValueError(
+            f"anchor_weight={cfg.anchor_weight} requires anchors, but none were given; "
+            "pass build_anchor_batch(...) or set anchor_weight=0 to run the ablation"
+        )
 
 
 def build_anchor_batch(encode: object, n_axes: int, device: str) -> tuple[Tensor, Tensor, Tensor]:
@@ -378,7 +389,13 @@ def train_projections(
     cfg = config or TrainConfig()
 
     _validate_inputs(
-        train_pairs, query_embeddings, item_embeddings, val_pairs, val_query_embeddings
+        train_pairs,
+        query_embeddings,
+        item_embeddings,
+        val_pairs,
+        val_query_embeddings,
+        cfg,
+        anchors,
     )
 
     torch.manual_seed(cfg.seed)

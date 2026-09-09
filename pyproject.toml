@@ -165,7 +165,14 @@ markers = [
   "network: hits a live third-party API; skipped in CI",
   "gpu: requires a CUDA/MPS device",
 ]
-filterwarnings = ["error", "ignore::DeprecationWarning"]
+filterwarnings = [
+  "error",
+  "ignore::DeprecationWarning",
+  # Starlette's TestClient asks for httpx2; that is a test-tooling deprecation
+  # in a dependency, not something this project can act on. Scoped to the exact
+  # message so a real UserWarning from our own code still fails the suite.
+  "ignore:Using .httpx. with .starlette.testclient. is deprecated:UserWarning",
+]
 
 [tool.coverage.run]
 branch = true

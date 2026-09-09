@@ -180,6 +180,37 @@ def benchmark(
     console.print(f"[green]report written to {save_results(results, results_out)}[/green]")
 
 
+def _save_serving_bundle(
+    result: TrainResult,
+    corpus: Corpus,
+    cfg: object,
+    encoder: str,
+    input_dim: int,
+    out_dir: Path,
+) -> None:
+    """Write everything the API needs to answer a query.
+
+    The item vectors alone are unusable: serving has to embed the user's free
+    text into the *same* space, which needs the query tower and the exact
+    encoder it was trained against.
+    """
+    import numpy as np
+    import torch
+
+    torch.save(
+        {
+            "query_tower": result.query_tower.state_dict(),
+            "input_dim": input_dim,
+            "output_dim": cfg.output_dim,  # type: ignore[attr-defined]
+            "dropout": cfg.dropout,  # type: ignore[attr-defined]
+            "encoder": encoder,
+        },
+        out_dir / "query_tower.pt",
+    )
+    order = sorted(corpus.item_index, key=lambda raw: corpus.item_index[raw])
+    np.save(out_dir / "item_ids.npy", np.asarray(order, dtype=np.int64))
+
+
 def _print_axis_table(reports: Sequence[AxisReport]) -> None:
     """Render the per-axis validation table."""
     table = Table("axis", "AUC", "Cohen d", "n+", "n-", "verdict", title="mood axis validation")
@@ -473,11 +504,14 @@ def train(
         val_pairs=val_pairs,
         val_query_embeddings=val_q,
         config=cfg,
+        anchors=anchors,
     )
 
     projected = result.project_items(item_emb)
     np.save(out_dir / "item_embeddings_trained.npy", projected)
     np.save(out_dir / "item_embeddings_offshelf.npy", item_emb)
+
+    _save_serving_bundle(result, c, cfg, encoder, int(all_q.shape[1]), out_dir)
 
     axis_report = _validate_axes(result, item_emb, c, n_axes, out_dir) if bottleneck else None
 
