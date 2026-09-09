@@ -217,6 +217,66 @@ One confound worth stating: a failing probe is not proof of a failing axis. The
 is meaningless" from "the probe is bad" needs human judgements, which is the
 part of Week 6 that remains genuinely undone.
 
+### Mood trajectories: the central claim, and what happened to it
+
+This project was built around the argument that a title is a *curve* over
+narrative position rather than a point. That is the contribution. It has now had
+its first honest test on real data, and **it did not survive.**
+
+**Can the curves be built at all?** Yes, barely. 8.0% of review segments carry a
+resolvable position, giving a median of 194 located segments per title and
+5-arc curves for **140 titles**. But the resolution is coarse: 62% of positions
+come from words like "the opening" and "the finale", only 8% from an explicit
+episode number, and the named-arc pattern fired **3 times in 141,000 segments**
+because the source reviews are lowercased. The evidence supports
+*beginning / middle / end*, not per-episode detail.
+
+**Do the curves move?** A little more than chance. Shuffling each title's mood
+vectors across its own segments destroys any true position-mood relationship
+while preserving sample size, bucket sizes and the marginal distribution:
+
+| statistic | real curves | position-shuffled | ratio |
+|---|---|---|---|
+| within-title σ | 0.0827 | 0.0720 | **1.15×** |
+| mean arc-to-arc step | 0.1075 | 0.0967 | **1.11×** |
+| within ÷ between | 1.010 | 0.839 | **1.20×** |
+
+So there *is* a real position-dependent signal — real curves move 15% more than
+shuffled ones. But roughly **87% of the apparent movement survives shuffling**,
+which means most of what looks like a mood arc is noise landing in buckets.
+
+**Does the shape carry anything the mean does not?** No. Predicting held-out
+AniList tags from the curve, 5-fold cross-validated ROC-AUC:
+
+| features | mean AUC |
+|---|---|
+| mean only (what a point model has) | **0.547** |
+| shape only (curve minus its own mean) | 0.485 — *chance* |
+| mean + shape | 0.513 — *worse than the mean alone* |
+
+Shape-only prediction is at chance, and adding shape features actively degrades
+the model. Only 2 of 9 tags improved.
+
+**The verdict.** On this corpus, mood trajectory is measurable but too weak to
+be useful, and it carries no information beyond the per-title average. The
+honest statement is *"the trajectory hypothesis is not supported by this data"*
+— not that it is refuted in general, and not that it works.
+
+Three constraints bound this result, and none of them is an excuse:
+
+1. **140 titles.** Forty shape features on 140 samples is badly underpowered;
+   the `full` model losing to `mean` is textbook overfitting.
+2. **Coarse positions.** Three-region resolution cannot express "inverts at
+   episode 12", which is the example the whole idea was motivated by.
+3. **Tag prediction may be the wrong target.** Tags describe a whole work, so a
+   show that starts light and turns bleak need not carry any tag a point model
+   would miss. A fair test needs shape-specific labels, which do not exist yet.
+
+Testing this properly needs case-sensitive review text, per-episode discussion
+threads rather than whole-work reviews, and a hand-built shape-query set. That
+is a different data-collection problem, and it is the honest next step rather
+than tuning this one until it looks positive.
+
 ## Roadmap
 
 - [x] Evaluation harness, metrics, splits — *written first*
@@ -235,7 +295,8 @@ part of Week 6 that remains genuinely undone.
 - [ ] Hard-negative mining ablation; unfreeze the backbone
 - [x] Mood bottleneck + anchor alignment + tag-probe validation
 - [ ] **Human** mood judgements — the tag probes are a proxy, not a substitute
-- [ ] Trajectory encoder + shape-query evaluation
+- [x] Trajectory construction + permutation control + shape-vs-mean test
+      (**negative result** — see above; the encoder is not justified by this data)
 - [ ] FastAPI service, HNSW index, quantised export, p95 latency budget
 - [ ] Writeup + workshop submission
 

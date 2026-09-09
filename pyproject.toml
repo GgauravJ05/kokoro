@@ -126,7 +126,10 @@ ignore = [
 # importorskip must run before the module under test is imported, so the
 # optional-dependency test modules necessarily import below the top.
 "tests/**" = ["D", "S101", "E402"]
-"scripts/**" = ["D"]
+# Experiment scripts are linear narratives; splitting them into helpers to
+# satisfy a statement count makes them harder to follow, not easier. X for a
+# feature matrix is the universal convention in this domain.
+"scripts/**" = ["D", "PLR0915", "PLR0912", "N806"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
