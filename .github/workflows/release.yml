@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build & publish release
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check dist/*
+      - name: record provenance of the released artifacts
+        run: |
+          pip install -e .
+          python -c "
+          from kokoro import provenance
+          print(provenance.current().banner())
+          " | tee dist/PROVENANCE.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
+            dist/PROVENANCE.txt
+          generate_release_notes: true
+          body: |
+            Kokoro ${{ github.ref_name }} — Copyright (C) 2026 Gaurav Jadhav.
+            Licensed AGPL-3.0-or-later. See NOTICE for attribution terms.

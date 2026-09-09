@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+title: "Kokoro: Mood-conditioned anime and manga retrieval with narrative-arc trajectory matching"
+message: "If you use this software or its ideas, please cite it."
+type: software
+authors:
+  - family-names: Jadhav
+    given-names: Gaurav
+    email: gauravmakarandjadhav@gmail.com
+    alias: JGaurav26
+repository-code: "https://github.com/GgauravJ05/kokoro"
+url: "https://github.com/GgauravJ05/kokoro"
+abstract: >-
+  Kokoro learns a continuous affective representation of anime and manga from
+  user review text rather than from catalog metadata, using a two-tower
+  contrastive retriever trained with InfoNCE and mined hard negatives. The item
+  representation is routed through a low-dimensional bottleneck anchored to named
+  bipolar mood axes, making every recommendation explainable. Unlike prior work,
+  Kokoro models mood as a trajectory over narrative position rather than a single
+  point, enabling retrieval on the shape of a work's emotional arc and generating
+  calibrated tonal-shift warnings.
+keywords:
+  - recommender systems
+  - information retrieval
+  - contrastive learning
+  - affective computing
+  - dense retrieval
+  - interpretability
+  - anime
+license: AGPL-3.0-or-later
+version: 0.1.0
+date-released: "2026-09-09"

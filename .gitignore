@@ -1,0 +1,81 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+dist/
+sdist/
+wheels/
+*.egg-info/
+*.egg
+.eggs/
+
+# Environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.hypothesis/
+.tox/
+.nox/
+
+# Notebooks
+.ipynb_checkpoints/
+notebooks/scratch/
+
+# Secrets & local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.toml
+
+# Data — never commit raw or derived corpora
+data/raw/**
+data/interim/**
+data/processed/**
+!data/**/.gitkeep
+*.parquet
+*.feather
+*.duckdb
+*.sqlite
+*.sqlite3
+
+# Model artifacts
+artifacts/
+checkpoints/
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.faiss
+*.bin
+
+# Experiment tracking
+wandb/
+mlruns/
+lightning_logs/
+outputs/
+runs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+!.vscode/extensions.json

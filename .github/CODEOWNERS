@@ -1,0 +1,10 @@
+# Every path requires review from the project author.
+# Combined with branch protection, this is what keeps main authoritative.
+*       @GgauravJ05
+
+# Attribution, licensing and provenance are never delegated.
+/LICENSE                        @GgauravJ05
+/NOTICE                         @GgauravJ05
+/CITATION.cff                   @GgauravJ05
+/src/kokoro/_provenance.py      @GgauravJ05
+/.github/                       @GgauravJ05

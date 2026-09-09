@@ -1,0 +1,44 @@
+# Run `pre-commit install` once after cloning. These are the same checks CI
+# runs, so a green commit here is a green pipeline there.
+default_language_version:
+  python: python3
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.5
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.2
+    hooks:
+      - id: mypy
+        additional_dependencies: [numpy, pydantic, pydantic-settings, types-PyYAML]
+        args: [--strict]
+        files: ^src/
+
+  - repo: local
+    hooks:
+      - id: attribution-headers
+        name: attribution headers
+        entry: python scripts/check_headers.py
+        language: system
+        pass_filenames: false
+        types: [python]

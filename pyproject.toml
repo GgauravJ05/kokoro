@@ -1,0 +1,175 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gaurav Jadhav
+
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kokoro-retrieval"
+version = "0.1.0"
+description = "Mood-conditioned anime & manga retrieval with narrative-arc trajectory matching"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Gaurav Jadhav", email = "gauravmakarandjadhav@gmail.com" }]
+maintainers = [{ name = "Gaurav Jadhav", email = "gauravmakarandjadhav@gmail.com" }]
+keywords = [
+  "recommender-systems", "information-retrieval", "contrastive-learning",
+  "anime", "manga", "affective-computing", "dense-retrieval",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
+]
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "pandas>=2.1",
+  "pyarrow>=15.0",
+  "pydantic>=2.6",
+  "pydantic-settings>=2.2",
+  "httpx>=0.27",
+  "tenacity>=8.2",
+  "typer>=0.12",
+  "rich>=13.7",
+  "pyyaml>=6.0",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+train = [
+  "torch>=2.2",
+  "transformers>=4.40",
+  "sentence-transformers>=3.0",
+  "datasets>=2.19",
+  "scikit-learn>=1.4",
+]
+index = ["hnswlib>=0.8"]
+serve = ["fastapi>=0.111", "uvicorn[standard]>=0.29"]
+track = ["wandb>=0.17"]
+dev = [
+  "pytest>=8.1",
+  "pytest-cov>=5.0",
+  "pytest-asyncio>=0.23",
+  "hypothesis>=6.100",
+  "ruff>=0.5",
+  "mypy>=1.10",
+  "pre-commit>=3.7",
+  "types-PyYAML",
+  "respx>=0.21",
+]
+all = ["kokoro-retrieval[train,index,serve,track,dev]"]
+
+[project.urls]
+Homepage = "https://github.com/GgauravJ05/kokoro"
+Repository = "https://github.com/GgauravJ05/kokoro"
+Issues = "https://github.com/GgauravJ05/kokoro/issues"
+Changelog = "https://github.com/GgauravJ05/kokoro/blob/main/CHANGELOG.md"
+
+[project.scripts]
+kokoro = "kokoro.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kokoro"]
+
+# ------------------------------------------------------------------------------
+# Ruff — lint + format
+# ------------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",    # pycodestyle
+  "F",         # pyflakes
+  "I",         # isort
+  "N",         # pep8-naming
+  "UP",        # pyupgrade
+  "B",         # bugbear
+  "A",         # builtins shadowing
+  "C4",        # comprehensions
+  "SIM",       # simplify
+  "PTH",       # use pathlib
+  "RUF",       # ruff-specific
+  "NPY",       # numpy legacy random
+  "S",         # bandit — this project shells out and hits the network
+  "PL",        # pylint
+  "D",         # pydocstyle
+]
+ignore = [
+  "D100",  # missing docstring in public module (SPDX header sits there instead)
+  "D104",  # missing docstring in public package
+  "D203", "D213",  # mutually exclusive with D211/D212
+  "E501",   # line length handled by the formatter
+  "D107",   # __init__ args are documented in the class docstring (Google style)
+  "PLR0913",  # model constructors legitimately take many hyperparameters
+  "PLR2004",  # magic values in thresholds are clearer inline than named
+  "PLR0917",  # ditto for their positional form
+  "PLC0415",  # lazy imports are deliberate: `import kokoro` must stay cheap
+  "RUF003",   # en/em dashes in comments are intentional (see features/arcs.py)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# importorskip must run before the module under test is imported, so the
+# optional-dependency test modules necessarily import below the top.
+"tests/**" = ["D", "S101", "E402"]
+"scripts/**" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# ------------------------------------------------------------------------------
+# mypy
+# ------------------------------------------------------------------------------
+[tool.mypy]
+# No python_version pin: mypy checks against the interpreter running it, so
+# the CI matrix exercises every supported version rather than just the floor.
+files = ["src/kokoro"]
+strict = true
+warn_unreachable = true
+disallow_untyped_defs = true
+plugins = []
+
+[[tool.mypy.overrides]]
+module = [
+  "hnswlib.*", "sentence_transformers.*", "wandb.*", "transformers.*",
+  "fastapi.*", "uvicorn.*", "tenacity.*",
+]
+ignore_missing_imports = true
+
+# ------------------------------------------------------------------------------
+# pytest
+# ------------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config --cov=kokoro --cov-report=term-missing"
+markers = [
+  "slow: deselect with '-m \"not slow\"'",
+  "network: hits a live third-party API; skipped in CI",
+  "gpu: requires a CUDA/MPS device",
+]
+filterwarnings = ["error", "ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+branch = true
+source = ["src/kokoro"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+]

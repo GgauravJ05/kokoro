@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/GgauravJ05/kokoro/security/advisories/new
+    about: Report privately. Do not open a public issue.
+  - name: Licensing or attribution question
+    url: https://github.com/GgauravJ05/kokoro/blob/main/NOTICE
+    about: Read NOTICE first; it covers most AGPL and attribution questions.

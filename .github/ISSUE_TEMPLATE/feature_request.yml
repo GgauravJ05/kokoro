@@ -1,0 +1,27 @@
+name: Feature request
+description: Propose a capability
+labels: [enhancement, triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What can you not do today? Describe the situation, not the solution.
+    validations: {required: true}
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+    validations: {required: true}
+  - type: textarea
+    id: measurement
+    attributes:
+      label: How would we know it worked
+      description: >-
+        Which metric moves, on which split? A feature that cannot be measured is
+        very hard to accept into this project.
+    validations: {required: true}
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

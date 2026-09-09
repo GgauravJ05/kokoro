@@ -1,0 +1,39 @@
+name: Bug report
+description: Something behaves incorrectly
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a **model or metric** bug, the seed, split and `artifacts/benchmark.json`
+        are what make it triageable. Without them it usually cannot be reproduced.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Observed behaviour versus what you expected.
+    validations: {required: true}
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Minimal steps or a snippet. Include the seed and split if relevant.
+      render: shell
+    validations: {required: true}
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "0.1.0, or the output of `kokoro provenance`"
+    validations: {required: true}
+  - type: input
+    id: python
+    attributes:
+      label: Python version and OS
+      placeholder: "3.12.4 on macOS 15"
+    validations: {required: true}
+  - type: textarea
+    id: logs
+    attributes:
+      label: Traceback or logs
+      render: shell

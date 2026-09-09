@@ -1,0 +1,25 @@
+name: Research question
+description: An open modelling or evaluation question
+labels: [research, discussion]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: The question
+    validations: {required: true}
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothesis
+      description: What do you expect, and why?
+  - type: textarea
+    id: experiment
+    attributes:
+      label: Experiment that would settle it
+      description: Which split, which baseline, which metric, what would count as evidence.
+    validations: {required: true}
+  - type: textarea
+    id: prior
+    attributes:
+      label: Prior work
+      description: Papers or systems that already tried this.
