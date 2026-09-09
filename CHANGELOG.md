@@ -4,7 +4,20 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.0] — 2026-09-09
+
+Weeks 1–9 of the build. Headline: cold-start retrieval at 0.0845 NDCG@10
+(4.97× random, +41% over an off-the-shelf encoder) where every collaborative
+baseline scores exactly 0.0000, served at 4.4 ms p95.
+
+### Reported negative results
+- **Trajectory hypothesis falsified.** Curve shape carries no information beyond
+  its own mean (shape-only AUC 0.485 = chance; mean+shape 0.513 < mean 0.547),
+  despite a permutation control confirming a real 1.15× position signal. The
+  neural trajectory encoder was deliberately not trained.
+- **Mood axes only weakly validated.** The anchor mechanism triples axis spread
+  and corrects two inverted axes at no retrieval cost, but 3 of 8 axes show
+  signal and none clears the stated 0.70 bar.
 
 ### Added
 - Evaluation harness, written before the models: accuracy metrics

@@ -1,5 +1,4 @@
-cff-version: 1.2.0
-title: "Kokoro: Mood-conditioned anime and manga retrieval with narrative-arc trajectory matching"
+title: "Kokoro: Mood-conditioned cold-start retrieval for anime"
 message: "If you use this software or its ideas, please cite it."
 type: software
 authors:
@@ -10,14 +9,19 @@ authors:
 repository-code: "https://github.com/GgauravJ05/kokoro"
 url: "https://github.com/GgauravJ05/kokoro"
 abstract: >-
-  Kokoro learns a continuous affective representation of anime and manga from
-  user review text rather than from catalog metadata, using a two-tower
-  contrastive retriever trained with InfoNCE and mined hard negatives. The item
-  representation is routed through a low-dimensional bottleneck anchored to named
-  bipolar mood axes, making every recommendation explainable. Unlike prior work,
-  Kokoro models mood as a trajectory over narrative position rather than a single
-  point, enabling retrieval on the shape of a work's emotional arc and generating
-  calibrated tonal-shift warnings.
+  Kokoro learns an affective representation of anime from user review prose
+  rather than from catalog metadata, using a two-tower contrastive retriever
+  trained with InfoNCE. Because the item tower encodes metadata only, the model
+  can rank titles with no interaction history: on a cold-start split every
+  collaborative baseline scores exactly 0.0000 NDCG@10, while the trained
+  content retriever reaches 0.0845 (4.97x random, +41% over an off-the-shelf
+  encoder) at 4.4 ms p95. The work also reports two negative results. An
+  interpretable bottleneck of named mood axes demonstrably shapes the space but
+  only three of eight axes reach weak agreement with held-out tag probes. And
+  the project's motivating hypothesis - that a title is better modelled as a
+  mood trajectory over narrative position than as a point - is falsified on this
+  corpus: a permutation control confirms a real but small position signal, while
+  curve shape carries no information beyond its own mean.
 keywords:
   - recommender systems
   - information retrieval

@@ -405,15 +405,15 @@
     </div>
     <h1>Mood is not in the<br><em>metadata</em>.</h1>
     <p class="standfirst">
-      A nine-week plan to build a retrieval system that learns how anime and manga
-      actually feel — and models that feeling as a curve over the runtime rather
-      than a single point.
+      A nine-week build log. The retrieval system works: it places titles no
+      collaborative model can represent at all. The curve hypothesis that
+      motivated it did not survive its own test.
     </p>
     <div class="meta">
       <span><b>Author</b> &nbsp;Gaurav Jadhav</span>
       <span><b>Repo</b> &nbsp;GgauravJ05/kokoro (private)</span>
       <span><b>Licence</b> &nbsp;AGPL-3.0-or-later</span>
-      <span><b>Status</b> &nbsp;Week 0 — scaffold shipped</span>
+      <span><b>Status</b> &nbsp;Weeks 1–9 complete</span>
     </div>
   </header>
 
@@ -466,11 +466,12 @@
           <span><i class="swatch" style="border-top-color: var(--muted); border-top-style: dashed;"></i>Non Non Biyori</span>
         </div>
         <figcaption>
-          Illustrative curves drawn from episode-level review commentary, not model output —
-          this is the hypothesis the trajectory encoder is built to capture. The mean of each
-          curve sits within ±0.1 of the others; the <em>shapes</em> do not overlap at all.
-          <code class="path">shape_distance()</code> weights the first difference precisely so
-          that rising and falling arcs separate even when their levels match.
+          <strong>Illustrative curves — the hypothesis, not a result.</strong> These are
+          hand-drawn to show what the model was built to capture. It did not:
+          on the real corpus, real curves move only 1.15× more than
+          position-shuffled ones, and 87% of the apparent movement is noise.
+          The figure is kept because it states the idea clearly, and the idea
+          being clear is what made it testable.
         </figcaption>
       </figure>
     </div>
@@ -602,7 +603,7 @@
         <div class="week">
           <span class="week-no">1–2</span>
           <div>
-            <h3>Corpus</h3>
+            <h3>Corpus ✓</h3>
             <p>AniList + Jikan ingestion at scale, dedup, spoiler filtering, arc/episode
             alignment. Freeze a versioned dataset and never quietly change it again.</p>
           </div>
@@ -610,7 +611,7 @@
         <div class="week">
           <span class="week-no">3</span>
           <div>
-            <h3>Baselines on real data</h3>
+            <h3>Baselines ✓</h3>
             <p>Run the existing harness against the frozen corpus. Add BM25 and the
             off-the-shelf-embedding baseline. This is the table everything is measured against.</p>
           </div>
@@ -618,7 +619,7 @@
         <div class="week">
           <span class="week-no">4–5</span>
           <div>
-            <h3>Two-tower training</h3>
+            <h3>Two-tower training ✓</h3>
             <p>InfoNCE with mined hard negatives. Ablate: negative strategy, batch size as a
             modelling parameter, tied vs untied towers, bottleneck width.</p>
           </div>
@@ -626,7 +627,7 @@
         <div class="week">
           <span class="week-no">6</span>
           <div>
-            <h3>Axis validation</h3>
+            <h3>Axis validation — partial</h3>
             <p>Collect ~200 human mood judgements; report Spearman ρ per axis. An axis that
             does not correlate gets reported as such, not quietly dropped.</p>
           </div>
@@ -634,16 +635,18 @@
         <div class="week pivot">
           <span class="week-no">7</span>
           <div>
-            <h3>Trajectory model — the contribution</h3>
-            <p>Train the arc encoder, evaluate shape queries against a hand-built query set,
-            and generate calibrated tonal-shift warnings. This is the week that makes the
-            project publishable rather than merely competent.</p>
+            <h3>Trajectory model — falsified</h3>
+            <p>Curves built for 140 titles, then tested against a permutation control.
+            Real curves move 1.15× more than shuffled ones, so a signal exists — but
+            shape-only prediction is at chance and adding shape <em>degrades</em> a
+            mean-only model. The neural encoder was deliberately never trained:
+            fitting more parameters to a signal that fails its control is fitting noise.</p>
           </div>
         </div>
         <div class="week">
           <span class="week-no">8</span>
           <div>
-            <h3>Serving</h3>
+            <h3>Serving ✓</h3>
             <p>FastAPI + HNSW, quantised export, recall-versus-latency sweep on
             <code class="path">ef_search</code>, p95 budget under 100 ms. Deploy on a free tier.</p>
           </div>
@@ -651,7 +654,7 @@
         <div class="week">
           <span class="week-no">9</span>
           <div>
-            <h3>Writeup</h3>
+            <h3>Writeup ✓</h3>
             <p>README with the full ablation table and plots, plus a short arXiv-style PDF.
             Target a workshop late-breaking-results track — even a rejection is a legitimate
             line, and the reviews are free feedback.</p>
@@ -671,23 +674,25 @@
         figures are placeholders until week 5 and week 8 fill them in.
       </p>
       <div class="bullet">
-        <span class="label">Target bullet — fill the brackets, don't invent them</span>
+        <span class="label">Actual bullet — every figure measured</span>
         <p>
-          <strong>Kokoro — Mood-Conditioned Anime Retrieval.</strong> Trained a two-tower
-          contrastive retriever (InfoNCE, mined hard negatives) over
-          <span class="placeholder">[N]</span> user reviews to map free-text affective queries
-          into a 10-dimensional interpretable mood space; introduced per-arc mood-trajectory
-          matching for narrative-shape queries. <span class="fig">+[X]%</span> NDCG@10 over
-          BM25 and <span class="fig">[Y]×</span> catalog coverage versus a popularity baseline,
-          served at <span class="fig">p95 [Z] ms</span> via HNSW.
-          <span class="placeholder">[repo] [paper] [demo]</span>
+          <strong>Kokoro — Mood-Conditioned Cold-Start Retrieval.</strong> Trained a
+          two-tower contrastive retriever (InfoNCE) over <span class="fig">52.5k</span>
+          user reviews so that titles with <em>zero</em> interaction history remain
+          rankable — where every collaborative baseline scores exactly
+          <span class="fig">0.0000</span> NDCG@10, this reaches
+          <span class="fig">0.0845</span> (<span class="fig">4.97×</span> random,
+          <span class="fig">+41%</span> over an off-the-shelf encoder on an identical
+          frozen backbone), served at <span class="fig">4.4 ms p95</span>.
+          Reported a falsified trajectory hypothesis with a permutation control.
+          <span class="placeholder">[repo] [paper]</span>
         </p>
       </div>
       <p style="font-size:.92rem;color:var(--ink-2)">
-        Two things determine whether this lands: the harness existing before the models — done —
-        and the trajectory idea being <em>executed</em> rather than mentioned. Everything else is
-        standard competent engineering, and standard competent engineering is not what gets
-        remembered.
+        The trajectory idea was executed, not mentioned — and it failed. That is the
+        honest version of the bullet, and it is the stronger interview story: a
+        falsifiable test of one's own central hypothesis, properly controlled, reported
+        when it came out negative.
       </p>
     </div>
   </section>

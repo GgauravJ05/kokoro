@@ -1,0 +1,414 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% Copyright (C) 2026 Gaurav Jadhav <gauravmakarandjadhav@gmail.com>
+% Canonical source: https://github.com/GgauravJ05/kokoro
+%
+% Compile with: pdflatex kokoro.tex (twice, for references)
+% or paste into Overleaf. CI builds this automatically; see .github/workflows/paper.yml
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{caption}
+
+\hypersetup{colorlinks=true, linkcolor=blue!50!black, urlcolor=blue!50!black,
+            citecolor=blue!50!black}
+
+\title{\textbf{Kokoro}: Mood-Conditioned Cold-Start Retrieval for Anime,\\
+       and a Falsified Trajectory Hypothesis}
+\author{Gaurav Jadhav\\
+        \small\texttt{gauravmakarandjadhav@gmail.com}\\
+        \small\url{https://github.com/GgauravJ05/kokoro}}
+\date{September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Catalog metadata does not express mood. The genre \emph{Drama} contains both
+\emph{Violet Evergarden} and \emph{School Days}, and no tag separates them on
+the axis a viewer actually cares about. We learn an affective representation of
+anime from user review prose instead, using a two-tower contrastive retriever
+trained with InfoNCE on (review segment $\rightarrow$ title metadata) pairs.
+Because the item tower encodes metadata only, the model can place a title that
+has never been interacted with. On a cold-start split of $9{,}864$ titles this
+matters absolutely rather than marginally: every collaborative baseline we test
+scores exactly $0.0000$ NDCG@10, because a model whose only representation of an
+item is who interacted with it has no representation of an item nobody has
+interacted with. Our trained content retriever reaches $0.0845$ NDCG@10 under
+the standard cold-only protocol, $4.97\times$ random and $+41\%$ over an
+off-the-shelf sentence encoder, served at $4.4$\,ms p95.
+
+We additionally report two negative results that we consider part of the
+contribution. First, routing the item tower through eight named bipolar mood
+axes with an anchor-alignment loss demonstrably shapes the space --- it triples
+axis spread and corrects two inverted axes at no retrieval cost --- but only
+three of eight axes reach even weak agreement (AUC $0.63$--$0.69$) with held-out
+tag probes, and none clears our stated $0.70$ bar. Second, and centrally, we
+falsify our own motivating hypothesis: that a title is better modelled as a mood
+\emph{curve} over narrative position than as a point. Curves can be built, and a
+permutation control confirms a real position-dependent signal ($1.15\times$ the
+movement of position-shuffled curves), but the curve's \emph{shape} carries no
+information beyond its own mean --- shape-only prediction sits at chance
+($0.485$ AUC) and adding shape features degrades a mean-only model
+($0.513$ vs.\ $0.547$). We report the conditions under which this conclusion
+should not be generalised.
+\end{abstract}
+
+\section{Introduction}
+
+Recommender systems for narrative media are usually built on two signals:
+collaborative filtering over interaction histories, and content filtering over
+catalog metadata. Both fail on the query a viewer actually asks. ``Something
+melancholy but hopeful, slow, that won't wreck me'' is a statement about
+affect, and affect is not in the metadata.
+
+Two observations motivate this work.
+
+\textbf{Mood must be learned from language.} MyAnimeList and AniList expose
+genres, themes, studios and scores. None distinguishes works that occupy
+opposite emotional territory inside one genre label. But viewers write at length
+about exactly this, in reviews, and that text is a supervision signal.
+
+\textbf{Interaction-based models cannot serve new titles.} A seasonal catalog
+adds work continuously, and a model that represents an item by its interaction
+column has, by construction, nothing to say about an item with an empty column.
+This is not a degradation; it is undefined.
+
+We take the second observation as the evaluation frame. Our headline split is
+cold-start, and the claim we defend is narrow and falsifiable: a content tower
+trained contrastively on review prose can place titles no collaborative model
+can represent at all.
+
+We also set out to defend a third claim --- that mood is a trajectory rather
+than a point --- and failed. Section~\ref{sec:trajectory} reports that failure
+with its controls, because a negative result with a permutation control is more
+informative than the weak positive we could have produced by tuning until the
+numbers cooperated.
+
+\section{Data}
+
+Both live APIs this project was designed against became unavailable during the
+work: AniList returned \texttt{403 The AniList API has been temporarily disabled
+due to severe stability issues}, and Jikan returned \texttt{504} for any
+endpoint requiring a live MyAnimeList fetch. Ingestion was therefore made
+source-agnostic and now defaults to static public dumps, which has the secondary
+benefit of exact reproducibility without an account or API key.
+
+\begin{table}[h]
+\centering
+\caption{Corpus composition. Nothing is redistributed; \texttt{data/} holds only
+ingestion scripts and a manifest recording each input's SHA-256, measured join
+rate, licence and known biases.}
+\begin{tabular}{lrl}
+\toprule
+Component & Size & Source (licence) \\
+\midrule
+Catalog titles        & $28{,}880$    & \texttt{lyfesan/myanimelist-top-anime} (MIT) \\
+Descriptive tags      & $4{,}736$ titles & \texttt{LeData/media-metadata-anilist} (CC0) \\
+Reviews               & $52{,}520$    & \texttt{Raiser1/anime-review-mal} (other) \\
+User--item ratings    & $6{,}332{,}233$ & CooperUnion MAL dump (undeclared) \\
+Rated titles          & $9{,}864$     & --- \\
+Users                 & $69{,}599$    & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Constraints we consider load-bearing}
+
+\textbf{Supervision covers 1.7\% of the catalog.} Reviews span $449$ titles
+against $28{,}880$. The model is supervised on the head and must generalise
+through content, which is precisely why cold-start is the honest headline rather
+than a footnote.
+
+\textbf{No synopsis exists.} The catalog source has no synopsis field. An early
+version of our pipeline matched a column named \texttt{Synonyms} with a
+substring heuristic and silently trained the item tower on alternate titles. We
+substitute AniList descriptive tags (\emph{Tragedy}, \emph{Philosophy},
+\emph{Found Family}), which are closer to mood vocabulary than genres, at
+$47.2\%$ coverage of rated titles.
+
+\textbf{No interaction timestamps.} The rating matrix carries none, so a
+temporal split is not computable and we do not report one. Debut dates are
+available from the catalog, which is what makes a genuine cold-start split
+possible.
+
+\textbf{Review text is lowercased} and drawn from MyAnimeList's top-500 with
+$91.3\%$ positive sentiment and \emph{mixed} verdicts dropped upstream. These
+bound what any affective axis can learn and are recorded in the corpus manifest.
+
+\section{Method}
+
+\subsection{Two-tower contrastive retrieval}
+
+A query tower encodes free text; an item tower encodes a title's metadata
+string. Both project a frozen MiniLM sentence encoder into a shared
+$256$-dimensional space, and we train only the projections. This is deliberate:
+the off-the-shelf baseline is the identical model with identity projections, so
+any difference is attributable to the objective rather than to encoder capacity.
+
+Training uses InfoNCE with in-batch negatives,
+\[
+\mathcal{L} = -\frac{1}{B}\sum_{i=1}^{B}
+  \log \frac{\exp(q_i^\top v_i / \tau)}
+            {\sum_{j=1}^{B}\exp(q_i^\top v_j / \tau)},
+\]
+symmetrised over both directions, with $\tau = 0.05$.
+
+Three design decisions carry the result.
+
+\textbf{The item tower never sees reviews.} A cold title has none. An item tower
+trained on review text would have nothing to encode for exactly the titles the
+evaluation is about.
+
+\textbf{Titles are masked out of queries.} A review naming its own work lets the
+model match on the title string rather than on mood --- a shortcut invisible in
+training metrics and fatal at cold start.
+
+\textbf{Each batch contains a title at most once.} With $194$ trainable titles,
+uniform sampling repeats titles constantly, and InfoNCE treats every off-diagonal
+entry as a negative; a repeat is therefore a gradient actively separating two
+segments that describe the same work.
+
+\subsection{Named mood axes}
+\label{sec:axes}
+
+Optionally the item representation passes through a bottleneck of eight bipolar
+axes (\emph{comfort}, \emph{pace}, \emph{hope}, \emph{intimacy},
+\emph{cognition}, \emph{levity}, \emph{catharsis}, \emph{intensity}), squashed
+to $[-1,1]$ and expanded back to the retrieval width. An anchor-alignment hinge
+pulls each axis's natural-language pole phrases toward that pole:
+\[
+\mathcal{L}_{\text{anchor}} =
+  \frac{1}{|A|}\sum_{a \in A} \max\!\big(0,\; 0.8 - p_a \cdot z_{a, k_a}\big),
+\]
+where $z$ is the bottleneck output, $k_a$ the anchor's axis and
+$p_a \in \{-1,+1\}$ its pole.
+
+\section{Evaluation}
+
+\subsection{Splits}
+
+We report \texttt{user\_holdout} for in-catalog accuracy and \texttt{cold\_start}
+as the headline. A temporal split is not computable on this data and is not
+reported. Cold-start is evaluated under two protocols, because reporting only
+one is how such results get overstated: \emph{full catalog} (rank new titles
+against everything, realistic and dominated by warm distractors) and
+\emph{cold-only} (rank new titles against each other, the standard protocol).
+
+\subsection{A metric that is misleading on this split}
+
+Popularity lift is standard in beyond-accuracy reporting and is
+\emph{uninterpretable} on a cold-start split. Every correct answer there has
+zero training popularity by construction, so the oracle lift is $0.00\times$ and
+a model achieves a \emph{high} lift precisely by filling slots with warm items
+that cannot be correct. We therefore introduce \textbf{candidate share@$k$}: the
+fraction of the top-$k$ that is eligible to be correct at all. It states the
+same fact without the misreading.
+
+\section{Results}
+
+\subsection{In-catalog retrieval}
+
+\begin{table}[h]
+\centering
+\caption{\texttt{user\_holdout}, $k{=}10$, $3{,}000$-user subsample. The
+from-scratch NumPy BPR implementation wins on accuracy \emph{and} surfaces
+$2.9\times$ more of the catalog at lower popularity bias.}
+\begin{tabular}{lrrrr}
+\toprule
+Model & Recall@10 & NDCG@10 & Coverage@10 & Pop.\ lift \\
+\midrule
+Random          & 0.0010 & 0.0026 & 0.991 & 0.99$\times$ \\
+Popularity      & 0.1047 & 0.1530 & 0.007 & 23.2$\times$ \\
+Item-$k$NN      & 0.1630 & 0.2434 & 0.057 & 18.8$\times$ \\
+\textbf{BPR-MF} & \textbf{0.1762} & \textbf{0.2633} & \textbf{0.167} & \textbf{13.6}$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Cold start}
+
+\begin{table}[h]
+\centering
+\caption{Cold start over $1{,}491$ titles with zero training interactions
+($998$ carry held-out ratings). Both content rows use the identical backbone and
+user-profile logic; the only difference is the trained projection.}
+\begin{tabular}{lrrrrr}
+\toprule
+& \multicolumn{3}{c}{Cold-only protocol} & \multicolumn{2}{c}{Full catalog} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-6}
+Model & Recall@10 & NDCG@10 & vs.\ random & NDCG@10 & Cand.\ share \\
+\midrule
+Popularity        & 0.0016 & 0.0032 & 0.19$\times$ & \textbf{0.0000} & \textbf{0.000} \\
+Item-$k$NN        & 0.0016 & 0.0032 & 0.19$\times$ & \textbf{0.0000} & \textbf{0.000} \\
+BPR-MF            & 0.0062 & 0.0147 & 0.87$\times$ & \textbf{0.0000} & \textbf{0.000} \\
+Random            & 0.0078 & 0.0170 & 1.00$\times$ & 0.0017 & 0.149 \\
+Content (off-the-shelf) & 0.0274 & 0.0597 & 3.51$\times$ & 0.0112 & 0.064 \\
+\textbf{Content (trained)} & \textbf{0.0487} & \textbf{0.0845} & \textbf{4.97}$\times$
+  & \textbf{0.0165} & \textbf{0.109} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Every collaborative model is at or below random. Popularity and item-$k$NN reach
+$0.19\times$ because they assign identical scores to all cold items and return
+one constant list to every user (coverage@10 $=0.001$, Gini $=0.999$).
+Contrastive training improves NDCG@10 by $41\%$ over the off-the-shelf encoder
+and raises candidate share by $69\%$.
+
+\subsection{Mood axes: a mechanism that works, a claim that does not}
+
+\begin{table}[h]
+\centering
+\caption{Anchor-weight ablation. Agreement is ROC-AUC against held-out tag
+probes; the $21$ probe tags are withheld from the item text during training, so
+the model never reads \emph{Tragedy} on a title whose \emph{comfort} it is
+graded on.}
+\begin{tabular}{lrrrr}
+\toprule
+Anchor weight & Val recall@1 & Axis spread $\sigma$ & Mean AUC & Inverted axes \\
+\midrule
+0.0 (ablation) & 0.175 & 0.085 & 0.465 & \textbf{2} \\
+1.0            & 0.183 & 0.186 & 0.537 & 0 \\
+5.0            & 0.176 & 0.218 & 0.561 & 0 \\
+20.0           & 0.179 & 0.238 & \textbf{0.565} & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The mechanism works and is nearly free: axis spread roughly triples, both
+inverted axes are corrected, and retrieval moves within noise. Per axis,
+\emph{levity} reaches $0.686$, \emph{comfort} $0.663$ and \emph{hope} $0.630$;
+\emph{cognition}, \emph{intensity} and \emph{intimacy} show no signal, and
+\emph{pace} and \emph{catharsis} have no tag proxy anywhere in $348$ AniList
+tags and are reported as untested rather than assumed.
+
+No axis clears our stated $0.70$ bar. The supportable claim is therefore
+\emph{three of eight axes are weakly but measurably aligned with their names},
+not that the model is interpretable. We note the confound: a failing probe is
+not proof of a failing axis, and our \emph{intimacy} probe arguably tests cast
+structure rather than loneliness.
+
+\subsection{Mood trajectories: a falsified hypothesis}
+\label{sec:trajectory}
+
+This project was motivated by the argument that a title is a curve over
+narrative position. \emph{Steins;Gate} inverts at episode 12; a single mood
+vector averages its halves into something describing neither. We tested that
+argument and it did not survive.
+
+\textbf{Curves can be built, at coarse resolution.} $8.0\%$ of review segments
+carry a resolvable position, a median of $194$ per title, yielding $5$-arc curves
+for $140$ titles. But $62\%$ of positions come from words like ``the opening''
+and ``the finale'', only $8\%$ from an explicit episode number, and a
+named-arc pattern fired $3$ times in $141{,}000$ segments because the source is
+lowercased. The evidence supports beginning/middle/end, not per-episode detail.
+
+\textbf{The movement is real but small.} Shuffling each title's mood vectors
+across its own segments destroys any position--mood relationship while
+preserving sample size, bucket sizes and the marginal distribution:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrrr}
+\toprule
+Statistic & Real curves & Position-shuffled & Ratio \\
+\midrule
+Within-title $\sigma$      & 0.0827 & 0.0720 & 1.15$\times$ \\
+Mean arc-to-arc step       & 0.1075 & 0.0967 & 1.11$\times$ \\
+Within $\div$ between      & 1.010  & 0.839  & 1.20$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Real curves move $15\%$ more than shuffled ones, so a position-dependent signal
+exists --- but roughly $87\%$ of the apparent movement survives shuffling.
+
+\textbf{The shape carries nothing beyond the mean.} Predicting held-out AniList
+tags by 5-fold cross-validated logistic regression:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lr}
+\toprule
+Features & Mean AUC \\
+\midrule
+Mean only (what a point model has)        & \textbf{0.547} \\
+Shape only (curve minus its own mean)     & 0.485 \emph{(chance)} \\
+Mean $+$ shape                            & 0.513 \emph{(worse than mean alone)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Shape-only prediction is at chance and adding shape degrades the model; only
+$2$ of $9$ tags improved. We therefore conclude that \textbf{on this corpus the
+trajectory hypothesis is not supported}, and we did not train the neural
+trajectory encoder --- fitting a higher-capacity model to a signal that fails
+its permutation control would be fitting noise.
+
+Three conditions bound this conclusion and we do not offer them as excuses:
+$140$ titles against $40$ shape features (the full-vs-mean loss is textbook
+overfitting); three-region position resolution, which cannot express ``inverts
+at episode 12''; and tag prediction possibly being an unfair target, since tags
+describe whole works. A fair test needs case-sensitive, episode-level discussion
+text --- for example per-episode discussion threads --- which we could not
+obtain.
+
+\subsection{Serving}
+
+\begin{table}[h]
+\centering
+\caption{Latency on a laptop CPU, $9{,}864$ titles, $256$-dim vectors. HNSW at
+\texttt{ef\_search}$=64$ achieves recall@10 $=1.000$ against exact search.}
+\begin{tabular}{lrr}
+\toprule
+Stage & p50 & p95 \\
+\midrule
+Query encoding (MiniLM)      & 2.78\,ms & 3.04\,ms \\
+HNSW lookup                  & 0.06\,ms & 0.08\,ms \\
+\textbf{End-to-end (HTTP)}   & \textbf{3.20\,ms} & \textbf{4.44\,ms} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+We note that the index barely earns its place at this scale: exact brute force
+runs in $0.102$\,ms, so HNSW saves $\approx 0.04$\,ms while the encoder costs
+$3$\,ms. The budget is dominated by one small encoder forward pass, which is the
+concrete argument for this architecture over a generative model call per
+request.
+
+\section{Limitations}
+
+Absolute cold-start numbers are low ($0.0845$ NDCG@10); this is a first result,
+not a solved problem. Supervision covers $1.7\%$ of the catalog. The review
+corpus is drawn from a top-500 subset with $91.3\%$ positive sentiment, so the
+axes are better resolved on the positive pole. Tag probes are a proxy for human
+mood judgements, which we did not collect; distinguishing ``the axis is
+meaningless'' from ``the probe is bad'' requires them.
+
+\section{Conclusion}
+
+Learning mood from review prose lets a retriever place titles that
+interaction-based models cannot represent at all --- the difference between
+$0.0845$ and exactly $0.0000$ NDCG@10 --- at $4.4$\,ms p95. The interpretability
+mechanism functions but supports only a weak claim, and the trajectory
+hypothesis that motivated the project is not supported by this data. We report
+all three outcomes because a system that is only evaluated where it succeeds has
+not been evaluated.
+
+\section*{Reproducibility}
+
+All results are produced by the public repository at
+\url{https://github.com/GgauravJ05/kokoro} under AGPL-3.0. The corpus is built
+from public dumps by \texttt{kokoro corpus build} and pinned by a content hash
+(\texttt{a11aac2a2c226689}); every artifact carries a provenance stamp. Tables
+in this paper are regenerated by \texttt{scripts/} entry points named in the
+repository README.
+
+\end{document}
