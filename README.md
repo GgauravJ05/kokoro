@@ -103,6 +103,28 @@ Three things this table is actually saying:
 Beating 0.2633 NDCG *while* moving coverage up is the target. Accuracy alone is
 not a result.
 
+### Cold-start: the headline split
+
+`--split cold_start --cold-cut-year 2014`. 998 titles have **zero** training
+interactions.
+
+| model | recall@10 | ndcg@10 | mrr@10 | coverage@10 |
+|---|---|---|---|---|
+| random | 0.0026 | 0.0039 | 0.0097 | 0.915 |
+| popularity | **0.0000** | **0.0000** | **0.0000** | 0.011 |
+| item-kNN | **0.0000** | **0.0000** | **0.0000** | 0.032 |
+| BPR-MF | **0.0000** | **0.0000** | **0.0000** | 0.099 |
+
+Every collaborative model scores exactly zero, and this is not a bug — it is
+arithmetic. A model whose only representation of an item is who interacted with
+it has *no* representation of an item nobody has interacted with. Random beats
+all three by chance alone.
+
+This is the gap Kokoro exists to fill. The content tower can embed a title from
+its synopsis, tags and reviews without a single interaction, so **any** non-zero
+cold-start NDCG is something no baseline here can produce at all. That is the
+claim to make, and it is falsifiable.
+
 ## Quickstart
 
 ```bash
@@ -174,9 +196,18 @@ catalog this long-tailed. `coverage`, `gini`, `intra_list_diversity`,
 | Split | What it proves | Reported as |
 |---|---|---|
 | `random` | optimistic ceiling | upper bound only |
-| `leave_one_out` | comparable to published baselines | secondary |
-| `temporal` | can we predict *tomorrow* from *today* | **headline** |
-| `cold_start` | can a brand-new title be placed at all | separate table |
+| `leave_one_out` | comparable to published baselines | needs timestamps — unavailable |
+| `temporal` | can we predict *tomorrow* from *today* | **not computable on this corpus** |
+| `user_holdout` | in-catalog accuracy without timestamps | secondary |
+| `cold_start` | can a brand-new title be placed at all | **headline** |
+
+**Why cold-start is the headline.** The rating source carries no interaction
+timestamps, so a temporal split cannot be computed honestly and is not reported.
+Debut dates *are* available from the catalog, which makes a real cold-start split
+possible — and it happens to be the split this project is actually about. Reviews
+cover 1.7% of the catalog, so the interesting question was never "can we re-rank
+titles everyone has already rated", it is "can a title with zero interactions be
+placed correctly from its content alone".
 
 **Baselines that must be beaten:** random, popularity, item-kNN, BM25 on
 synopsis, off-the-shelf embedding similarity, and a raw LLM prompt. That last

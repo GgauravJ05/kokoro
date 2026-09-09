@@ -96,6 +96,10 @@ def benchmark(
         3000, min=10, help="User subsample size when running on a real corpus."
     ),
     epochs: int = typer.Option(5, min=1, help="BPR training epochs."),
+    strategy: str = typer.Option(
+        "user_holdout", "--split", help="Split strategy: user_holdout or cold_start."
+    ),
+    cold_cut_year: int = typer.Option(2014, help="Debut year cut for the cold_start split."),
 ) -> None:
     """Run the baseline suite, on a real corpus when one is given.
 
@@ -104,7 +108,7 @@ def benchmark(
     structure to learn.
     """
     if corpus is not None:
-        _benchmark_corpus(corpus, results_out, k, seed, max_users, epochs)
+        _benchmark_corpus(corpus, results_out, k, seed, max_users, epochs, strategy, cold_cut_year)
         return
     import numpy as np
 
@@ -137,12 +141,21 @@ def benchmark(
 
 
 def _benchmark_corpus(
-    corpus_path: str, results_out: str, k: int, seed: int, max_users: int, epochs: int
+    corpus_path: str,
+    results_out: str,
+    k: int,
+    seed: int,
+    max_users: int,
+    epochs: int,
+    strategy: str = "user_holdout",
+    cold_cut_year: int = 2014,
 ) -> None:
     """Run the baselines against a built corpus."""
+    from datetime import datetime, timezone
+
     from kokoro.data.corpus import load_corpus
     from kokoro.eval.harness import run_benchmark, save_results, to_markdown_table
-    from kokoro.eval.splits import user_holdout_split
+    from kokoro.eval.splits import cold_start_split, user_holdout_split
     from kokoro.models.base import Retriever
     from kokoro.models.baselines import (
         ItemKNNRecommender,
@@ -159,12 +172,24 @@ def _benchmark_corpus(
         f"corpus [bold]{c.version}[/bold]  "
         f"{len(data):,} interactions  {data.n_users:,} users  {data.n_items:,} items"
     )
-    console.print(
-        "[yellow]split: user_holdout — this source carries no timestamps, so a "
-        "temporal split is not computable on it.[/yellow]"
-    )
-
-    split = user_holdout_split(data, holdout_frac=0.2, seed=seed)
+    if strategy == "cold_start":
+        cut = int(datetime(cold_cut_year, 1, 1, tzinfo=timezone.utc).timestamp())
+        split = cold_start_split(data, c.item_debut, cut=cut)
+        n_cold = split.meta["n_cold_items"]
+        console.print(
+            f"[yellow]split: cold_start at {cold_cut_year} — {n_cold:,} titles have "
+            f"zero training interactions. Collaborative models cannot represent them "
+            f"at all; that is the point of the split.[/yellow]"
+        )
+    elif strategy == "user_holdout":
+        split = user_holdout_split(data, holdout_frac=0.2, seed=seed)
+        console.print(
+            "[yellow]split: user_holdout — this source carries no interaction "
+            "timestamps, so a temporal split is not computable on it.[/yellow]"
+        )
+    else:
+        console.print(f"[red]unknown split {strategy!r}: use user_holdout or cold_start[/red]")
+        raise typer.Exit(1)
 
     models: list[Retriever] = [
         RandomRecommender(seed=seed),
@@ -179,6 +204,7 @@ def _benchmark_corpus(
         r["corpus_version"] = c.version
         r["max_users_subsample"] = max_users
         r["n_interactions"] = len(data)
+        r["split_strategy"] = strategy
 
     console.print()
     console.print(to_markdown_table(results))

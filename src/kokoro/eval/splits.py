@@ -32,6 +32,14 @@ Three strategies, used for different claims:
     Holds out entire items released after the cut, so no interaction for them
     exists at training time. Measures whether the content tower alone can place
     a brand-new title, which is what a real catalog needs every season.
+
+    **This is the headline split for this project.** The ingested rating matrix
+    has no interaction timestamps, so :func:`temporal_split` cannot be computed
+    honestly on it; debut dates come from the catalog instead, which makes cold
+    start both possible and the more interesting question. Every collaborative
+    baseline scores exactly 0.0 here by construction — an item nobody has
+    interacted with has no collaborative representation — so this split is where
+    a content-based model has to justify itself.
 """
 
 from __future__ import annotations

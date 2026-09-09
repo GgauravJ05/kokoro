@@ -34,6 +34,9 @@ class Corpus:
         titles: Title metadata indexed by raw ``anime_id``.
         reviews: Review rows carrying raw ``anime_id``.
         item_index: Raw ``anime_id`` to contiguous item position.
+        item_debut: Debut timestamp per contiguous item position, in unix
+            seconds, for :func:`~kokoro.eval.splits.cold_start_split`. Titles
+            with no known air date get ``0`` so they are never treated as cold.
         manifest: The corpus manifest, including its version and known biases.
     """
 
@@ -41,6 +44,7 @@ class Corpus:
     titles: pd.DataFrame
     reviews: pd.DataFrame
     item_index: dict[int, int]
+    item_debut: npt.NDArray[np.int64]
     manifest: dict[str, Any]
 
     @property
@@ -110,6 +114,16 @@ def load_corpus(
     item_codes, item_uniques = pd.factorize(ratings["anime_id"], sort=True)
     item_index = {int(raw): pos for pos, raw in enumerate(item_uniques)}
 
+    # Debut dates come from the catalog, not the rating matrix — which is the
+    # only reason a cold-start split is possible on a source that carries no
+    # interaction timestamps at all.
+    debut_lookup = titles.dropna(subset=["aired_start"]).set_index("anime_id")["aired_start"]
+    item_debut = np.zeros(len(item_index), dtype=np.int64)
+    for raw, pos in item_index.items():
+        ts = debut_lookup.get(raw)
+        if ts is not None and not pd.isna(ts):
+            item_debut[pos] = int(pd.Timestamp(ts).timestamp())
+
     interactions = Interactions(
         user=user_codes.astype(np.int64),
         item=item_codes.astype(np.int64),
@@ -125,5 +139,6 @@ def load_corpus(
         titles=titles,
         reviews=reviews,
         item_index=item_index,
+        item_debut=item_debut,
         manifest=manifest,
     )

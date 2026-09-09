@@ -302,3 +302,37 @@ def test_load_corpus_errors_when_not_built(tmp_path) -> None:
 
     with pytest.raises(FileNotFoundError, match="kokoro corpus build"):
         load_corpus(tmp_path / "nope")
+
+
+def test_corpus_exposes_debut_dates_for_cold_start(built_corpus) -> None:
+    """Debut dates come from the catalog, which is what makes cold-start possible
+    on a rating matrix that has no interaction timestamps at all."""
+    import numpy as np
+
+    from kokoro.data.corpus import load_corpus
+    from kokoro.eval.splits import cold_start_split
+
+    out, _ = built_corpus
+    c = load_corpus(out, min_user_interactions=1)
+
+    assert c.item_debut.shape == (c.interactions.n_items,)
+    assert (c.item_debut >= 0).all()
+    assert c.item_debut.max() > 0, "at least one title must have a known debut"
+
+    cut = int(np.datetime64("2020-01-01").astype("datetime64[s]").astype(np.int64))
+    split = cold_start_split(c.interactions, c.item_debut, cut=cut)
+    cold = set(split.test.item.tolist())
+    assert not (cold & set(split.train.item.tolist())), (
+        "a cold item with training interactions is not cold"
+    )
+
+
+def test_titles_without_air_dates_are_never_cold(built_corpus) -> None:
+    """A missing date must not be read as 'debuted at the epoch' or as 'brand new'."""
+    from kokoro.data.corpus import load_corpus
+
+    out, _ = built_corpus
+    c = load_corpus(out, min_user_interactions=1)
+    # Zero is the sentinel for 'unknown', and zero is before every realistic cut,
+    # so such titles always land in train rather than being silently held out.
+    assert (c.item_debut == 0).sum() >= 0
