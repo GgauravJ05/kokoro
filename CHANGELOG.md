@@ -42,4 +42,5 @@ baseline scores exactly 0.0000, served at 4.4 ms p95.
   retrieval-neutral embedding watermark.
 - `kokoro` CLI: `provenance`, `config`, `ingest`, `benchmark`, `watermark`.
 
-[Unreleased]: https://github.com/GgauravJ05/kokoro/compare/main...HEAD
+[Unreleased]: https://github.com/GgauravJ05/kokoro/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/GgauravJ05/kokoro/releases/tag/v0.1.0
