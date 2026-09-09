@@ -33,9 +33,7 @@ def iter_sources(root: Path) -> list[Path]:
         if not base.exists():
             continue
         files += [
-            p
-            for p in base.rglob("*.py")
-            if not SKIP_DIRS & set(p.parts) and p.stat().st_size > 0
+            p for p in base.rglob("*.py") if not SKIP_DIRS & set(p.parts) and p.stat().st_size > 0
         ]
     return sorted(files)
 
