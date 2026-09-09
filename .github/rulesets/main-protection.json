@@ -26,6 +26,7 @@
           {"context": "mypy (strict)"},
           {"context": "license headers"},
           {"context": "test 3.12 / ubuntu-latest"},
+          {"context": "ann index (native build)"},
           {"context": "build distribution"}
         ]
       }
