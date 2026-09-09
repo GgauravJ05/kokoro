@@ -181,12 +181,18 @@ git clone https://github.com/GgauravJ05/kokoro.git
 cd kokoro
 make install                  # venv + extras + pre-commit
 
+make demo                     # http://localhost:8000 — works straight away
+```
+
+The trained model and catalog metadata are committed, so the demo runs from a
+clone with no data build. To reproduce the corpus and the numbers:
+
+```bash
 kokoro corpus sources         # every source with licence and known biases
 kokoro corpus build           # 28,880 titles / 52.5k reviews / 6.3M ratings
 kokoro train --bottleneck --anchor-weight 20
 kokoro benchmark --corpus data/processed --split cold_start --cold-only \
     --content --trained artifacts/two_tower/item_embeddings_trained.npy
-make demo                     # http://localhost:8000  — web UI + API
 ```
 
 ```bash
@@ -230,9 +236,18 @@ produced it.
 
 ## Data & ethics
 
-No third-party dataset is redistributed. `data/` holds ingestion scripts and a
-manifest recording each input's SHA-256, measured join rate, licence and **known
-biases**. Run `kokoro corpus sources` to print them. The ones that bound the
+**What ships in this repo.** `data/processed/titles.parquet` (catalog metadata)
+and `artifacts/two_tower/` (the trained model) are committed, so a clone runs
+`make demo` immediately with no corpus build. The metadata derives solely from
+an MIT-licensed catalog and a CC0 tag dump, and contains no review text or user
+ratings.
+
+**What does not.** Review text (licence `other`) and the rating matrix (no
+declared licence) are never redistributed — `kokoro corpus build` fetches them
+from their published locations when you want to retrain or re-evaluate.
+
+`data/` also holds ingestion scripts and a manifest recording each input's
+SHA-256, measured join rate, licence and **known biases**. Run `kokoro corpus sources` to print them. The ones that bound the
 science:
 
 - Reviews cover **449 of 28,880 titles (1.7%)** — supervision is on the head.

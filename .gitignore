@@ -45,10 +45,12 @@ notebooks/scratch/
 *.key
 secrets.toml
 
-# Data — never commit raw or derived corpora
-data/raw/**
-data/interim/**
-data/processed/**
+# Data — raw and derived corpora stay out, with two deliberate exceptions
+# below. Note `dir/*` rather than `dir/`: git cannot re-include a file whose
+# parent directory is itself excluded, so the negations would never apply.
+data/raw/*
+data/interim/*
+data/processed/*
 !data/**/.gitkeep
 *.parquet
 *.feather
@@ -56,8 +58,15 @@ data/processed/**
 *.sqlite
 *.sqlite3
 
+# Shipped so a fresh clone can run `make demo` without rebuilding the corpus.
+# Both derive ONLY from the MIT-licensed catalog and the CC0 tag dump; neither
+# contains review text or user ratings, whose sources declare "other" and no
+# licence respectively and are therefore never redistributed.
+!data/processed/titles.parquet
+!data/processed/manifest.json
+
 # Model artifacts
-artifacts/
+artifacts/*
 checkpoints/
 *.pt
 *.pth
@@ -65,6 +74,18 @@ checkpoints/
 *.safetensors
 *.faiss
 *.bin
+
+# The serving bundle is shipped: it is this project's own model output, and
+# without it the demo cannot run from a clone. The larger off-the-shelf
+# embeddings are not shipped — they are reproducible in one command and add
+# 15 MB for nothing.
+!artifacts/two_tower/
+artifacts/two_tower/*
+!artifacts/two_tower/item_embeddings_trained.npy
+!artifacts/two_tower/query_tower.pt
+!artifacts/two_tower/item_ids.npy
+!artifacts/two_tower/axis_values.npy
+!artifacts/two_tower/training.json
 
 # Experiment tracking
 wandb/

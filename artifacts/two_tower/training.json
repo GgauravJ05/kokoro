@@ -1,0 +1,146 @@
+{
+  "corpus_version": "a11aac2a2c226689",
+  "encoder": "sentence-transformers/all-MiniLM-L6-v2",
+  "config": {
+    "output_dim": 256,
+    "epochs": 40,
+    "batch_size": 128,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "temperature": 0.05,
+    "symmetric": true,
+    "dropout": 0.1,
+    "seed": 1337,
+    "patience": 5,
+    "use_bottleneck": true,
+    "n_axes": 8,
+    "anchor_weight": 20.0
+  },
+  "n_pairs": 28241,
+  "n_titles": 194,
+  "best_epoch": 15,
+  "train_loss": [
+    9.486975980527474,
+    4.44580371933754,
+    4.328357973484078,
+    4.2754757548823505,
+    4.233033529435746,
+    4.207941458682821,
+    4.171572573257215,
+    4.168193481185219,
+    4.139682637320624,
+    4.138869442120947,
+    4.129278408156501,
+    4.106404949920346,
+    4.097459178982359,
+    4.100341104497813,
+    4.0936854812834,
+    4.077127212225789,
+    4.084525577949755,
+    4.068306318437211,
+    4.069844868448046,
+    4.061647848649458
+  ],
+  "val_recall_at_1": [
+    0.11543859541416168,
+    0.13543859124183655,
+    0.15017543733119965,
+    0.14982455968856812,
+    0.16070175170898438,
+    0.15964911878108978,
+    0.1656140387058258,
+    0.16070175170898438,
+    0.1645614057779312,
+    0.16947367787361145,
+    0.1631578952074051,
+    0.16631579399108887,
+    0.1666666716337204,
+    0.16807018220424652,
+    0.17263157665729523,
+    0.16526316106319427,
+    0.17192982137203217,
+    0.16526316106319427,
+    0.16140350699424744,
+    0.16035087406635284
+  ],
+  "axes": [
+    {
+      "axis": "comfort",
+      "auc": 0.6762412937948501,
+      "cohens_d": 0.6072071077419171,
+      "n_positive": 184,
+      "n_negative": 824,
+      "conclusive": true
+    },
+    {
+      "axis": "pace",
+      "auc": NaN,
+      "cohens_d": NaN,
+      "n_positive": 0,
+      "n_negative": 0,
+      "conclusive": false
+    },
+    {
+      "axis": "hope",
+      "auc": 0.6168170077488575,
+      "cohens_d": 0.4038743004454079,
+      "n_positive": 175,
+      "n_negative": 719,
+      "conclusive": true
+    },
+    {
+      "axis": "intimacy",
+      "auc": 0.42566206639313686,
+      "cohens_d": -0.28387928412493296,
+      "n_positive": 383,
+      "n_negative": 245,
+      "conclusive": true
+    },
+    {
+      "axis": "cognition",
+      "auc": 0.5197733057970318,
+      "cohens_d": 0.06560131442625951,
+      "n_positive": 470,
+      "n_negative": 443,
+      "conclusive": true
+    },
+    {
+      "axis": "levity",
+      "auc": 0.6823044276697494,
+      "cohens_d": 0.6716655032850002,
+      "n_positive": 462,
+      "n_negative": 917,
+      "conclusive": true
+    },
+    {
+      "axis": "catharsis",
+      "auc": NaN,
+      "cohens_d": NaN,
+      "n_positive": 0,
+      "n_negative": 0,
+      "conclusive": false
+    },
+    {
+      "axis": "intensity",
+      "auc": 0.4995505933572081,
+      "cohens_d": -0.0077002099770639605,
+      "n_positive": 705,
+      "n_negative": 202,
+      "conclusive": true
+    }
+  ],
+  "_kokoro_provenance": {
+    "project": "kokoro",
+    "author": "Gaurav Jadhav",
+    "author_email": "gauravmakarandjadhav@gmail.com",
+    "author_github": "JGaurav26",
+    "repository": "https://github.com/GgauravJ05/kokoro",
+    "license": "AGPL-3.0-or-later",
+    "copyright": "Copyright (C) 2026 Gaurav Jadhav <gauravmakarandjadhav@gmail.com>",
+    "version": "0.1.0",
+    "fingerprint": "b6b2a975cf1ced09b6917aec361b3427",
+    "git_commit": "1dc0701d134433ae57918de4f9a603a479d3a83a",
+    "git_dirty": true,
+    "created_at": "2026-09-09T16:22:06+00:00"
+  }
+}

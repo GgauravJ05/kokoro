@@ -1,0 +1,113 @@
+{
+  "corpus_version": "a11aac2a2c226689",
+  "built_at": "2026-09-09T18:59:28+05:30",
+  "build_params": {
+    "min_reviews_per_title": 5
+  },
+  "statistics": {
+    "catalog_titles": 28880,
+    "reviews_total": 52723,
+    "reviews_joined": 52520,
+    "review_join_rate": 0.9961,
+    "review_titles_total": 490,
+    "review_titles_in_catalog": 488,
+    "supervised_titles": 449,
+    "supervised_fraction_of_catalog": 0.01555,
+    "ratings_total": 6337241,
+    "ratings_joined": 6332233,
+    "rating_join_rate": 0.9992,
+    "rating_titles_in_catalog": 9864,
+    "rating_users": 69599,
+    "median_reviews_per_supervised_title": 68.0,
+    "median_review_chars": 1638.0,
+    "titles_with_tags": 4736,
+    "rated_titles_with_tags": 4658,
+    "tag_coverage_of_rated": 0.4722
+  },
+  "tables": {
+    "titles": "titles.parquet",
+    "reviews": "reviews.parquet",
+    "ratings": "ratings.parquet"
+  },
+  "sources": {
+    "catalog": {
+      "key": "catalog",
+      "repo": "lyfesan/myanimelist-top-anime-dataset",
+      "filename": "mal_top_anime_dataset.csv",
+      "role": "catalog",
+      "licence": "mit",
+      "notes": "Title metadata including synopsis, genres, themes, studios and air dates. Carries no id column, but every row's URL embeds the MyAnimeList id (/anime/<id>/...), which is what joins it to the review and rating sets. Recovering that id lifts review coverage from 46.3% to 99.8%.",
+      "biases": [
+        "Ranked subset of MyAnimeList, not the full catalog \u2014 the unranked long tail is absent, so catalog-coverage metrics are computed over a catalog that is already filtered toward the popular."
+      ],
+      "redistributable": false,
+      "sha256": "6432fbbc109ad808eb5c05fc883a0e3fd6e71e5ab7988d6098e8db7ff462888b",
+      "bytes": 9617391,
+      "url": "https://huggingface.co/datasets/lyfesan/myanimelist-top-anime-dataset/resolve/main/mal_top_anime_dataset.csv"
+    },
+    "reviews": {
+      "key": "reviews",
+      "repo": "Raiser1/anime-review-mal",
+      "filename": "anime_sentiment_limpio.csv",
+      "role": "reviews",
+      "licence": "other",
+      "notes": "Long-form review text with a MyAnimeList anime_id on every row (median 1,488 characters). This is the contrastive training signal. Column names are Spanish: texto_resena is the review body.",
+      "biases": [
+        "Scraped from MyAnimeList's top 500 series only: 490 distinct titles against a 28,880-title catalog. The model is supervised on 1.7% of the catalog and must generalise to the rest through the content tower \u2014 which makes cold-start the headline evaluation, not a footnote.",
+        "91.3% of reviews are positive. Mood axes learned here will be better resolved on the positive pole; report per-axis coverage before claiming any axis is calibrated.",
+        "'mixed' verdicts were dropped by the dataset author. That is exactly the ambivalent middle a mood model most needs, and its absence caps what the catharsis and hope axes can learn.",
+        "Text is lowercased and cleaned, which destroys the capitalisation that features.arcs uses to detect named arcs (the 'Marley arc' pattern). Expect degraded named-arc recall on this source."
+      ],
+      "redistributable": false,
+      "sha256": "0186ecebdbf226dc9f5219ef1e51983449fc21fa8c57232752cd3af341f630e7",
+      "bytes": 131927791,
+      "url": "https://huggingface.co/datasets/Raiser1/anime-review-mal/resolve/main/anime_sentiment_limpio.csv"
+    },
+    "tags": {
+      "key": "tags",
+      "repo": "LeData/media-metadata-anilist-anime",
+      "filename": "data/train-00000-of-00001.parquet",
+      "role": "tags",
+      "licence": "cc0-1.0",
+      "notes": "AniList descriptive tags, joined on mal_id. This is the item tower's primary content signal: the MyAnimeList catalog carries no synopsis at all, and AniList tags ('Tragedy', 'Philosophy', 'Found Family', 'Episodic') are closer to mood vocabulary than genres are anyway. Public domain, so the one source here with no redistribution question.",
+      "biases": [
+        "Top 10,000 titles by popularity: covers 49.8% of rated titles. The other half falls back to genres, themes and studio, so the item tower sees materially less signal for them \u2014 report cold-start broken down by tag availability, not just in aggregate."
+      ],
+      "redistributable": false,
+      "sha256": "17a6b0ded5cbe6701a11ebb9052c370e342140a63156ee13c8e62ea936075edb",
+      "bytes": 1967958,
+      "url": "https://huggingface.co/datasets/LeData/media-metadata-anilist-anime/resolve/main/data/train-00000-of-00001.parquet"
+    },
+    "ratings": {
+      "key": "ratings",
+      "repo": "jason1966/CooperUnion_anime-recommendations-database",
+      "filename": "rating.csv",
+      "role": "ratings",
+      "licence": "unknown",
+      "notes": "User-item rating matrix, ~73k users. Supplies the collaborative signal for the item-kNN and BPR baselines, which until now have only ever run on synthetic data. A rating of -1 means 'watched, unrated'.",
+      "biases": [
+        "2017 snapshot: contains no title released after it, so a temporal split on this matrix cannot test on recent seasons.",
+        "Licence is undeclared on the dataset card. Ingest only; do not redistribute, and re-check before the repository goes public."
+      ],
+      "redistributable": false,
+      "sha256": "f2cf790539cff9c7ac462d546381493a5748fc22bedaaf3fbf32d2e10294ab62",
+      "bytes": 111404899,
+      "url": "https://huggingface.co/datasets/jason1966/CooperUnion_anime-recommendations-database/resolve/main/rating.csv"
+    }
+  },
+  "redistribution": "No source file is redistributed by this repository. data/ is gitignored. The reviews source declares licence 'other' and the ratings source declares none; both are ingested for non-commercial research only.",
+  "_kokoro_provenance": {
+    "project": "kokoro",
+    "author": "Gaurav Jadhav",
+    "author_email": "gauravmakarandjadhav@gmail.com",
+    "author_github": "JGaurav26",
+    "repository": "https://github.com/GgauravJ05/kokoro",
+    "license": "AGPL-3.0-or-later",
+    "copyright": "Copyright (C) 2026 Gaurav Jadhav <gauravmakarandjadhav@gmail.com>",
+    "version": "0.1.0",
+    "fingerprint": "b6b2a975cf1ced09b6917aec361b3427",
+    "git_commit": "b638dc76389052582aa28098f5e2d72515b755b2",
+    "git_dirty": true,
+    "created_at": "2026-09-09T13:29:28+00:00"
+  }
+}

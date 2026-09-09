@@ -42,7 +42,21 @@ This project consumes data from third-party services under their own terms:
   * Jikan    — https://jikan.moe/   (unofficial MyAnimeList REST API)
   * MyAnimeList — https://myanimelist.net/ (see their Terms of Service)
 
-No third-party dataset is redistributed in this repository. `data/` contains
-only pointers and reproducible ingestion scripts. Titles, synopses, cover art
-and user reviews remain the property of their respective owners and are used
-here for non-commercial research purposes.
+What this repository ships, and why:
+
+  SHIPPED  data/processed/titles.parquet
+           Derived solely from lyfesan/myanimelist-top-anime-dataset (MIT) and
+           LeData/media-metadata-anilist-anime (CC0-1.0). Both licences permit
+           redistribution. Contains no review text and no user ratings.
+
+  SHIPPED  artifacts/two_tower/*
+           This project's own model output. Included so that a clone can run
+           `make demo` without rebuilding the corpus.
+
+  NOT SHIPPED  review text (Raiser1/anime-review-mal, licence "other") and the
+           user-item rating matrix (CooperUnion dump, no declared licence).
+           Neither is redistributed. `kokoro corpus build` fetches them at
+           ingestion time from their published locations.
+
+Titles, cover art and user reviews remain the property of their respective
+owners and are used here for non-commercial research purposes.
