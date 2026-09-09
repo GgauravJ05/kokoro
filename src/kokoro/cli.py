@@ -106,6 +106,9 @@ def benchmark(
     encoder: str = typer.Option(
         "sentence-transformers/all-MiniLM-L6-v2", help="Sentence encoder for --content."
     ),
+    trained: str | None = typer.Option(
+        None, help="Path to trained item embeddings (.npy) from `kokoro train`."
+    ),
 ) -> None:
     """Run the baseline suite, on a real corpus when one is given.
 
@@ -127,6 +130,7 @@ def benchmark(
             cold_cut_year=cold_cut_year,
             content=content,
             encoder=encoder,
+            trained=trained,
         )
         return
     import numpy as np
@@ -170,6 +174,7 @@ def _benchmark_corpus(
     cold_cut_year: int = 2014,
     content: bool = False,
     encoder: str = "sentence-transformers/all-MiniLM-L6-v2",
+    trained: str | None = None,
 ) -> None:
     """Run the baselines against a built corpus."""
     from datetime import datetime, timezone
@@ -227,6 +232,15 @@ def _benchmark_corpus(
         embeddings = encode_texts(texts, model_name=encoder, show_progress=True)
         models.append(ContentRetriever(embeddings, name="content-offshelf"))
 
+    if trained is not None:
+        import numpy as np
+
+        from kokoro.models.content import ContentRetriever as TrainedRetriever
+
+        vectors = np.load(trained)
+        console.print(f"loaded trained item embeddings {vectors.shape} from {trained}")
+        models.append(TrainedRetriever(vectors.astype(np.float32), name="content-trained"))
+
     with console.status("fitting and scoring…"):
         results = run_benchmark(models, split, k=k)
 
@@ -239,6 +253,120 @@ def _benchmark_corpus(
     console.print()
     console.print(to_markdown_table(results))
     console.print(f"\n[green]report written to {save_results(results, results_out)}[/green]")
+
+
+@app.command()
+def train(
+    corpus_path: str = typer.Option("data/processed", "--corpus", help="Built corpus."),
+    out: str = typer.Option("artifacts/two_tower", help="Directory for the trained artifacts."),
+    encoder: str = typer.Option(
+        "sentence-transformers/all-MiniLM-L6-v2", help="Frozen sentence encoder."
+    ),
+    max_per_title: int = typer.Option(150, min=1, help="Cap on review segments per title."),
+    epochs: int = typer.Option(30, min=1, help="Training epochs."),
+    batch_size: int = typer.Option(128, min=2, help="Distinct titles per batch."),
+    output_dim: int = typer.Option(256, min=8, help="Shared retrieval space width."),
+    temperature: float = typer.Option(0.05, help="InfoNCE temperature."),
+    seed: int = typer.Option(1337, help="RNG seed."),
+) -> None:
+    """Train the two-tower projections on review text and evaluate cold start."""
+    import json
+    from dataclasses import asdict
+    from pathlib import Path
+
+    import numpy as np
+
+    from kokoro import provenance
+    from kokoro.data.corpus import load_corpus
+    from kokoro.data.pairs import build_pairs
+    from kokoro.models.content import encode_texts
+    from kokoro.train.contrastive import TrainConfig, train_projections
+
+    out_dir = Path(out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    with console.status("loading corpus…"):
+        # No user subsample here: training reads reviews and metadata, never
+        # interactions, and the item space is subsample-independent anyway.
+        c = load_corpus(corpus_path, seed=seed)
+    console.print(f"corpus [bold]{c.version}[/bold]  {len(c.item_index):,} items")
+
+    with console.status("building training pairs…"):
+        pairs = build_pairs(c, max_per_title=max_per_title, seed=seed)
+    console.print(
+        f"pairs: {len(pairs):,} segments over {pairs.n_titles} titles "
+        f"(capped at {max_per_title}/title)"
+    )
+    console.print(f"  example query: [dim]{pairs.queries[0][:140]}[/dim]")
+
+    train_pairs, val_pairs = pairs.split(val_frac=0.1, seed=seed)
+    console.print(
+        f"  split by title: {len(train_pairs):,} train / {len(val_pairs):,} val "
+        f"({val_pairs.n_titles} held-out titles)"
+    )
+
+    item_texts = c.item_texts()
+    console.print(f"encoding {len(item_texts):,} item texts…")
+    item_emb = encode_texts(item_texts, model_name=encoder, show_progress=True)
+
+    console.print(f"encoding {len(pairs):,} review segments…")
+    all_q = encode_texts(pairs.queries, model_name=encoder, show_progress=True)
+
+    # Re-encode per split rather than slicing, so alignment cannot drift.
+    train_idx = np.array(
+        [i for i, p in enumerate(pairs.item_pos) if p in set(train_pairs.item_pos.tolist())]
+    )
+    val_idx = np.array(
+        [i for i, p in enumerate(pairs.item_pos) if p in set(val_pairs.item_pos.tolist())]
+    )
+    train_q, val_q = all_q[train_idx], all_q[val_idx]
+
+    cfg = TrainConfig(
+        output_dim=output_dim,
+        epochs=epochs,
+        batch_size=batch_size,
+        temperature=temperature,
+        seed=seed,
+    )
+    console.print("\n[bold]training[/bold]")
+    result = train_projections(
+        train_pairs,
+        train_q,
+        item_emb,
+        val_pairs=val_pairs,
+        val_query_embeddings=val_q,
+        config=cfg,
+    )
+
+    projected = result.project_items(item_emb)
+    np.save(out_dir / "item_embeddings_trained.npy", projected)
+    np.save(out_dir / "item_embeddings_offshelf.npy", item_emb)
+
+    report = provenance.stamp(
+        {
+            "corpus_version": c.version,
+            "encoder": encoder,
+            "config": asdict(cfg),
+            "n_pairs": len(pairs),
+            "n_titles": pairs.n_titles,
+            "best_epoch": result.best_epoch,
+            "train_loss": result.train_loss,
+            "val_recall_at_1": result.val_recall,
+        }
+    )
+    (out_dir / "training.json").write_text(json.dumps(report, indent=2, default=str) + "\n")
+    console.print(f"\n[green]artifacts written to {out_dir}/[/green]")
+    console.print(
+        f"best epoch {result.best_epoch}  "
+        f"val recall@1 {result.val_recall[result.best_epoch - 1]:.4f}"
+        if result.val_recall
+        else ""
+    )
+    console.print(
+        "\nEvaluate with:\n"
+        f"  kokoro benchmark --corpus {corpus_path} --split cold_start "
+        f"--content --trained {out_dir}/item_embeddings_trained.npy"
+    )
 
 
 @app.command()

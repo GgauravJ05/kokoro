@@ -110,11 +110,12 @@ interactions.
 
 | model | recall@10 | ndcg@10 | mrr@10 | coverage@10 | pop. lift |
 |---|---|---|---|---|---|
-| random | 0.0026 | 0.0039 | 0.0097 | 0.915 | 0.99× |
-| popularity | **0.0000** | **0.0000** | **0.0000** | 0.011 | 25.3× |
-| item-kNN | **0.0000** | **0.0000** | **0.0000** | 0.032 | 20.9× |
-| BPR-MF | **0.0000** | **0.0000** | **0.0000** | 0.099 | 17.0× |
-| **content** (off-the-shelf) | **0.0094** | **0.0119** | **0.0231** | 0.116 | **1.69×** |
+| random | 0.0016 | 0.0031 | 0.0076 | 0.810 | 1.0× |
+| popularity | **0.0000** | **0.0000** | **0.0000** | 0.008 | 38.6× |
+| item-kNN | **0.0000** | **0.0000** | **0.0000** | 0.021 | 31.9× |
+| BPR-MF | **0.0000** | **0.0000** | **0.0000** | 0.051 | 27.2× |
+| content, off-the-shelf | 0.0090 | 0.0112 | 0.0216 | 0.083 | 2.4× |
+| **content, contrastively trained** | **0.0163** | **0.0165** | **0.0279** | **0.133** | 3.3× |
 
 Every collaborative model scores exactly zero, and this is not a bug — it is
 arithmetic. A model whose only representation of an item is who interacted with
@@ -125,10 +126,19 @@ The content retriever is the first model here that can answer this split at all:
 **3× random**, and a popularity lift of 1.69× against their 17–25×. It embeds a
 title from its metadata text, so a show that aired yesterday is rankable today.
 
-That number is the bar, not the goal. It comes from an **off-the-shelf**
-MiniLM encoder over tags and genres, with no training on review text — it is
-precisely the "would a generic embedding model have done just as well?" baseline
-that the trained two-tower has to beat before it is worth anything.
+**Contrastive training on review text beats the off-the-shelf encoder by 47%
+NDCG and 80% recall, while raising catalog coverage 60%.** Both rows use the
+identical MiniLM backbone and the identical user-profile logic; the only
+difference is a learned projection trained with InfoNCE on
+`(review segment → title metadata)` pairs. So the lift is attributable to the
+objective, not to a bigger encoder.
+
+Two honest caveats on that number. The absolute values are low — cold-start
+retrieval over 998 unseen titles is hard, and 0.0165 NDCG is a first result, not
+a finished one. And popularity lift went *up* (2.4× → 3.3×), so training bought
+accuracy partly by drifting toward popular titles; that is a regression worth
+fixing, and it is visible only because the beyond-accuracy metrics are reported
+next to the accuracy ones.
 
 ## Quickstart
 
@@ -239,7 +249,8 @@ good.
       currently runs off static Hugging Face dumps instead
 - [ ] Arc alignment: hand-annotated set, then extractor evaluation
 - [x] Content tower + off-the-shelf cold-start baseline (first non-zero result)
-- [ ] Two-tower training + negative-mining ablation
+- [x] Two-tower contrastive training (frozen backbone, learned projections)
+- [ ] Hard-negative mining ablation; unfreeze the backbone
 - [ ] Mood-axis human validation (Spearman ρ per axis)
 - [ ] Trajectory encoder + shape-query evaluation
 - [ ] FastAPI service, HNSW index, quantised export, p95 latency budget

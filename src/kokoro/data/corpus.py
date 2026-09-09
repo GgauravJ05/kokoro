@@ -134,6 +134,15 @@ def load_corpus(
 
     ratings = ratings[ratings["rating"] >= min_rating]
 
+    # The item space is fixed BEFORE any user subsampling. Deriving it from the
+    # sampled rows instead would make position 42 mean a different title for
+    # every max_users value — so item embeddings trained under one subsample
+    # would silently misalign with a benchmark run under another, and nothing
+    # would raise. This also keeps every rated title trainable rather than only
+    # those a small user sample happens to cover.
+    all_items = np.sort(ratings["anime_id"].unique())
+    item_index = {int(raw): pos for pos, raw in enumerate(all_items)}
+
     counts = ratings.groupby("user_id").size()
     eligible = counts[counts >= min_user_interactions].index
     ratings = ratings[ratings["user_id"].isin(eligible)]
@@ -144,8 +153,7 @@ def load_corpus(
         ratings = ratings[ratings["user_id"].isin(keep)]
 
     user_codes, _ = pd.factorize(ratings["user_id"], sort=True)
-    item_codes, item_uniques = pd.factorize(ratings["anime_id"], sort=True)
-    item_index = {int(raw): pos for pos, raw in enumerate(item_uniques)}
+    item_codes = ratings["anime_id"].map(item_index).to_numpy()
 
     # Debut dates come from the catalog, not the rating matrix — which is the
     # only reason a cold-start split is possible on a source that carries no
